@@ -29,11 +29,11 @@ pub fn save_settings(app: AppHandle, settings: Value) -> Result<(), String> {
     fs::write(dir.join("settings.json"), bytes).map_err(|e| e.to_string())
 }
 
-/// The OS "Downloads" folder — the sensible default output location.
+/// The OS Videos folder — the sensible default output location.
 #[tauri::command]
 pub fn default_download_dir(app: AppHandle) -> Result<String, String> {
     app.path()
-        .download_dir()
+        .video_dir()
         .map(|p| p.to_string_lossy().into_owned())
         .map_err(|e| e.to_string())
 }

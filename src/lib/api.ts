@@ -123,4 +123,12 @@ export const api = {
   engineVersions() {
     return invoke<EngineVersions>("engine_versions");
   },
+
+  hasActiveDownloads() {
+    return invoke<boolean>("has_active_downloads");
+  },
+
+  forceCancelAll() {
+    return invoke("force_cancel_all");
+  },
 };

@@ -26,6 +26,14 @@ export function nextToStart(downloads: DownloadItem[]): DownloadItem | null {
 }
 
 export function enqueue(input: EnqueueInput) {
+  if (!input.outputDirectory) {
+    notify(
+      "No download folder selected. Choose one in Settings or pick a folder.",
+      "error",
+    );
+    return;
+  }
+
   const id = crypto.randomUUID();
   useDownloadStore.getState().add({
     id,

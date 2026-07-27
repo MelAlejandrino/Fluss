@@ -2,8 +2,14 @@ import { Minus, Square, Copy, X } from "lucide-react";
 import { useMaximized } from "@/hooks/useMaximized";
 import { minimizeWindow, toggleMaximizeWindow, closeWindow } from "@/lib/window";
 
-export function TitleBar() {
+interface TitleBarProps {
+  onClose?: () => void;
+}
+
+export function TitleBar({ onClose }: TitleBarProps) {
   const maximized = useMaximized();
+
+  const handleClose = onClose ?? closeWindow;
 
   return (
     <div
@@ -39,7 +45,7 @@ export function TitleBar() {
           )}
         </button>
         <button
-          onClick={closeWindow}
+          onClick={handleClose}
           aria-label="Close"
           className="inline-flex h-full w-11 items-center justify-center text-on-surface-variant hover:bg-error hover:text-on-error"
         >

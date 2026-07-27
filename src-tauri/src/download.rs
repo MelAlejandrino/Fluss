@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
 use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::binaries;
@@ -51,9 +52,12 @@ struct ProgressEvent {
     status: String,
 }
 
+#[derive(Clone)]
 struct Job {
     child: Arc<Mutex<Child>>,
     cancelled: Arc<AtomicBool>,
+    output_directory: String,
+    keep_partial: bool,
 }
 
 /// download_id → running process. Cleared when a download ends.
@@ -94,11 +98,15 @@ pub async fn start_download(
 
     let child = Arc::new(Mutex::new(child));
     let cancelled = Arc::new(AtomicBool::new(false));
+    let output_directory = options.output_directory.clone();
+    let keep_partial = options.keep_partial;
     registry.0.lock().unwrap().insert(
         id.clone(),
         Job {
             child: child.clone(),
             cancelled: cancelled.clone(),
+            output_directory,
+            keep_partial,
         },
     );
 
@@ -107,7 +115,7 @@ pub async fn start_download(
         let id = id.clone();
         let child = child.clone();
         tauri::async_runtime::spawn_blocking(move || {
-            run_to_completion(app, id, child, stdout, stderr)
+            run_to_completion(app, id, child, stdout, stderr, &options.output_directory, options.keep_partial)
         })
         .await
         .map_err(|e| format!("Download task failed: {e}"))?
@@ -135,6 +143,57 @@ pub fn cancel_download(registry: State<'_, DownloadRegistry>, id: String) {
     }
 }
 
+/// Returns true if there is at least one download in progress (downloading
+/// or processing). Used by the app lifecycle to prevent accidental close.
+#[tauri::command]
+pub fn has_active_downloads(registry: State<'_, DownloadRegistry>) -> bool {
+    !registry.0.lock().unwrap().is_empty()
+}
+
+/// Cancels every active download and kills their child processes.
+/// Used when the user confirms "Quit" with active downloads.
+#[tauri::command]
+pub fn force_cancel_all(registry: State<'_, DownloadRegistry>) {
+    let jobs = registry.0.lock().unwrap().clone();
+    for (_, job) in jobs.iter() {
+        job.cancelled.store(true, Ordering::SeqCst);
+        let _ = job.child.lock().unwrap().kill();
+    }
+}
+
+/// Removes incomplete media files in the output directory that are likely
+/// leftover partial downloads. Targets files that look like active partial
+/// artifacts (created in the last 24 hours or with no matching completed file).
+fn cleanup_partial_files(output_directory: &str) {
+    let dir = Path::new(output_directory);
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    let now = SystemTime::now();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+        if !matches!(ext.as_str(), "mp4" | "mp3" | "mkv" | "webm" | "m4a" | "flv" | "avi" | "mov" | "wmv" | "part" | "tmp" | "downloading") {
+            continue;
+        }
+        let metadata = match entry.metadata() {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        let modified = match metadata.modified() {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        let elapsed = now.duration_since(modified).unwrap_or_default();
+        if elapsed < Duration::from_secs(86400) {
+            let _ = fs::remove_file(&path);
+        }
+    }
+}
+
 /// Progress lines and the final path both arrive on stdout (yt-dlp writes the
 /// `--progress-template` there); stderr carries warnings/errors and is drained
 /// on its own thread to avoid a pipe-buffer deadlock.
@@ -144,6 +203,8 @@ fn run_to_completion(
     child: Arc<Mutex<Child>>,
     stdout: impl Read,
     stderr: impl Read + Send + 'static,
+    output_directory: &str,
+    keep_partial: bool,
 ) -> Result<String, String> {
     let stderr_thread = std::thread::spawn(move || {
         BufReader::new(stderr)
@@ -195,6 +256,9 @@ fn run_to_completion(
             .cloned()
             .collect::<Vec<_>>()
             .join("\n");
+        if !keep_partial {
+            cleanup_partial_files(output_directory);
+        }
         Err(tail)
     }
 }

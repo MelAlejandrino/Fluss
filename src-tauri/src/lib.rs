@@ -15,6 +15,8 @@ pub fn run() {
             analyze::analyze_url,
             download::start_download,
             download::cancel_download,
+            download::has_active_downloads,
+            download::force_cancel_all,
             files::open_file,
             files::reveal_in_folder,
             files::open_url,

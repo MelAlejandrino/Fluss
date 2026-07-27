@@ -1,4 +1,4 @@
-import { Download, FolderClosed } from "lucide-react";
+import { Download, FolderClosed, FolderOpen } from "lucide-react";
 import { UrlInput } from "@/components/media/UrlInput";
 import { MediaPreview } from "@/components/media/MediaPreview";
 import { FormatSelector } from "@/components/media/FormatSelector";
@@ -13,6 +13,19 @@ export function HomePage() {
   const { metadata, isAnalyzing, error, details, analyze } = useAnalyzeUrl();
   const form = useDownloadForm();
   const { start } = useStartDownload();
+  const hasDirectory = !!form.directory;
+
+  function handleDownload() {
+    if (!hasDirectory || !metadata) return;
+    start({
+      url: metadata.webpageUrl,
+      title: metadata.title,
+      thumbnailUrl: metadata.thumbnailUrl,
+      format: form.format,
+      quality: form.quality,
+      outputDirectory: form.directory,
+    });
+  }
 
   return (
     <div className="mx-auto flex min-h-full max-w-3xl flex-col justify-center gap-8 px-8 py-12">
@@ -47,35 +60,39 @@ export function HomePage() {
               disabled={form.format === "mp3"}
             />
 
-            <div className="flex flex-col gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
-                Save to
-              </span>
-              <button
-                onClick={form.chooseDirectory}
-                className="inline-flex w-fit items-center gap-2 rounded border border-outline-variant bg-surface-container-low px-3 py-2 font-mono text-xs text-on-surface hover:border-outline"
-              >
-                <FolderClosed className="size-4" strokeWidth={1.5} />
-                {form.directory}
-              </button>
-            </div>
+             <div className="flex flex-col gap-2">
+               <span className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                 Save to
+               </span>
+               <button
+                 onClick={form.chooseDirectory}
+                 className={`inline-flex w-fit items-center gap-2 rounded border px-3 py-2 font-mono text-xs transition-colors ${
+                   hasDirectory
+                     ? "border-outline-variant bg-surface-container-low text-on-surface hover:border-outline"
+                     : "border-error/40 bg-error/10 text-error hover:border-error"
+                 }`}
+               >
+                 {hasDirectory ? (
+                   <>
+                     <FolderClosed className="size-4" strokeWidth={1.5} />
+                     {form.directory}
+                   </>
+                 ) : (
+                   <>
+                     <FolderOpen className="size-4" strokeWidth={1.5} />
+                     No folder selected
+                   </>
+                 )}
+               </button>
+             </div>
 
-            <button
-              onClick={() =>
-                start({
-                  url: metadata.webpageUrl,
-                  title: metadata.title,
-                  thumbnailUrl: metadata.thumbnailUrl,
-                  format: form.format,
-                  quality: form.quality,
-                  outputDirectory: form.directory,
-                })
-              }
-              className="inline-flex w-fit items-center gap-2 rounded bg-primary px-5 py-2 text-sm font-medium text-on-primary transition-all hover:bg-primary/90 active:scale-[0.98]"
-            >
-              <Download className="size-4" strokeWidth={1.5} />
-              Download
-            </button>
+             <button
+               onClick={handleDownload}
+               className="inline-flex w-fit items-center gap-2 rounded bg-primary px-5 py-2 text-sm font-medium text-on-primary transition-all hover:bg-primary/90 active:scale-[0.98]"
+             >
+               <Download className="size-4" strokeWidth={1.5} />
+               Download
+             </button>
           </div>
         </div>
       )}
