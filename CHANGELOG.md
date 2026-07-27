@@ -20,6 +20,8 @@ and FFmpeg.
 - yt-dlp, FFmpeg, and Deno bundled — nothing to install
 
 **Install**
-- Windows: run the `.exe` (or `.msi`) installer
-- macOS: open the `.dmg` and drag Fluss to Applications
-- Linux: use the `.AppImage` or `.deb`
+- Windows: run the `.exe` (or `.msi`) installer (SmartScreen: More info → Run anyway)
+- macOS (Apple Silicon): open the `.dmg`, drag Fluss to Applications. This build
+  is unsigned, so first launch: right-click the app → **Open** (or run
+  `xattr -cr /Applications/Fluss.app` to clear quarantine).
+- Linux: `.AppImage` (make it executable: `chmod +x Fluss*.AppImage`) or `.deb`
