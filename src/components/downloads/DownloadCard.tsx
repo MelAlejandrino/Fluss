@@ -1,0 +1,68 @@
+import { X, FolderOpen, Play } from "lucide-react";
+import type { DownloadCardProps } from "@/types/download";
+import { DownloadStatus } from "./DownloadStatus";
+import { DownloadProgress } from "./DownloadProgress";
+
+export function DownloadCard({ item, onOpen, onReveal, onCancel }: DownloadCardProps) {
+  const showProgress = item.status === "downloading" || item.status === "processing";
+  const isDone = item.status === "completed";
+
+  return (
+    <div className="flex gap-4 rounded-sm border border-outline-variant bg-surface-container-low p-4 transition-colors hover:border-outline">
+      <div className="aspect-video w-32 shrink-0 overflow-hidden rounded-sm border border-outline-variant bg-surface-container-high">
+        {item.thumbnailUrl && (
+          <img src={item.thumbnailUrl} alt="" className="size-full object-cover" />
+        )}
+      </div>
+
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="truncate text-base font-semibold text-on-surface">
+              {item.title ?? item.url}
+            </h3>
+            <p className="font-mono text-[11px] uppercase tracking-widest text-on-surface-variant">
+              {item.format}
+              {item.quality ? ` · ${item.quality}` : ""}
+            </p>
+          </div>
+          <DownloadStatus status={item.status} />
+        </div>
+
+        {showProgress && <DownloadProgress item={item} />}
+
+        {(showProgress || isDone) && (
+          <div className="mt-1 flex gap-2">
+            {isDone && (
+              <>
+                <button
+                  onClick={() => onOpen(item.filePath)}
+                  className="inline-flex items-center gap-1.5 rounded bg-primary px-3 py-1.5 text-xs font-medium text-on-primary hover:bg-primary/90 active:scale-[0.98]"
+                >
+                  <Play className="size-3.5" strokeWidth={1.5} />
+                  Open File
+                </button>
+                <button
+                  onClick={() => (onReveal ?? onOpen)(item.filePath)}
+                  className="inline-flex items-center gap-1.5 rounded border border-outline-variant px-3 py-1.5 text-xs font-medium text-on-surface hover:border-outline"
+                >
+                  <FolderOpen className="size-3.5" strokeWidth={1.5} />
+                  Show in Folder
+                </button>
+              </>
+            )}
+            {showProgress && onCancel && (
+              <button
+                onClick={() => onCancel(item.id)}
+                className="inline-flex items-center gap-1.5 rounded border border-outline-variant px-3 py-1.5 text-xs font-medium text-on-surface hover:border-outline"
+              >
+                <X className="size-3.5" strokeWidth={1.5} />
+                Cancel
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
