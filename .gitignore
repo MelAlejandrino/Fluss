@@ -15,6 +15,7 @@ dist-ssr
 # Bundled engines — fetched in CI or placed locally for a build; never commit
 src-tauri/binaries/*/*
 !src-tauri/binaries/*/.gitkeep
+.engines-tmp/
 
 # Editor directories and files
 .vscode/*

@@ -1,18 +1,17 @@
 name: Release
 
 # Push a version tag (e.g. v0.1.0) to build installers and open a DRAFT release.
-# You review the draft and publish it yourself.
+# The draft is created ONLY if all three platforms build successfully — a single
+# platform failure aborts the release (no partial draft). You publish the draft.
 on:
   push:
     tags:
       - "v*"
 
 jobs:
-  release:
-    permissions:
-      contents: write # create the release + upload assets
+  build:
     strategy:
-      fail-fast: false
+      fail-fast: true # one platform fails -> cancel the rest, no release
       matrix:
         include:
           - platform: windows-latest
@@ -22,7 +21,6 @@ jobs:
           - platform: ubuntu-latest
             engines: linux
     runs-on: ${{ matrix.platform }}
-
     steps:
       - uses: actions/checkout@v4
 
@@ -57,29 +55,46 @@ jobs:
         shell: bash
         run: bash scripts/fetch-binaries.sh ${{ matrix.engines }}
 
+      # Build only — no release here, so a failure can't leave a partial draft.
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.engines }}
+          path: src-tauri/target/release/bundle/**
+          if-no-files-found: error
+
+  release:
+    needs: build # runs only if ALL build jobs succeeded
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all installers
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
       - name: Extract release notes from CHANGELOG.md
-        id: notes
         shell: bash
         run: |
           VER="${GITHUB_REF_NAME#v}"
-          NOTES="$(awk -v ver="$VER" '
+          awk -v ver="$VER" '
             /^## / { if (found) exit; if (index($0, ver)) { found=1; next } }
             found { print }
-          ' CHANGELOG.md)"
-          [ -z "$NOTES" ] && NOTES="See the commit history for changes in ${GITHUB_REF_NAME}."
-          {
-            echo "body<<___EOF___"
-            echo "$NOTES"
-            echo "___EOF___"
-          } >> "$GITHUB_OUTPUT"
+          ' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "See the commit history for changes in ${GITHUB_REF_NAME}." > notes.md
 
-      - name: Build and create draft release
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Fluss ${{ github.ref_name }}"
-          releaseBody: ${{ steps.notes.outputs.body }}
-          releaseDraft: true
-          prerelease: false
+          tag_name: ${{ github.ref_name }}
+          name: "Fluss ${{ github.ref_name }}"
+          body_path: notes.md
+          draft: true
+          files: artifacts/**/*
