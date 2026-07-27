@@ -1,11 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { RELEASES_API } from "@/lib/appInfo";
 import type { VideoMetadata, DownloadOptions } from "@/types/media";
 import type { DownloadProgressEvent, DownloadHistoryItem } from "@/types/download";
 import type { Settings, EngineVersions } from "@/types/settings";
+
+export type ResizeDir =
+  | "East"
+  | "North"
+  | "NorthEast"
+  | "NorthWest"
+  | "South"
+  | "SouthEast"
+  | "SouthWest"
+  | "West";
 
 interface LatestRelease {
   version: string;
@@ -75,6 +86,26 @@ export const api = {
 
   saveHistory(items: DownloadHistoryItem[]) {
     return invoke("save_history", { items });
+  },
+
+  // Custom title-bar window controls (native decorations are off).
+  windowMinimize() {
+    return getCurrentWindow().minimize();
+  },
+  windowToggleMaximize() {
+    return getCurrentWindow().toggleMaximize();
+  },
+  windowClose() {
+    return getCurrentWindow().close();
+  },
+  windowIsMaximized() {
+    return getCurrentWindow().isMaximized();
+  },
+  onWindowResized(handler: () => void) {
+    return getCurrentWindow().onResized(() => handler());
+  },
+  startResizeDragging(direction: ResizeDir) {
+    return getCurrentWindow().startResizeDragging(direction);
   },
 
   getSettings() {

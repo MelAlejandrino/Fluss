@@ -14,6 +14,7 @@ and FFmpeg.
 - Live progress with speed, size, and ETA; cancel in progress
 - Download queue (one at a time, auto-advances)
 - Persistent history with open / show in folder / download again / remove
+- Custom window title bar (minimize / maximize / close, drag-to-move)
 - Settings: default folder, theme (light/dark/system), auto-start, notifications
 - Update check on launch + manual "Check for updates", with an About section
   (version, developer, repository link)

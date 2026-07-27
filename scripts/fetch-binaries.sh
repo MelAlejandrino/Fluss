@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Downloads the standalone yt-dlp / ffmpeg / deno for one platform into
 # src-tauri/binaries/<platform>/ so `tauri build` bundles a self-contained app.
-# Called by the release workflow: scripts/fetch-binaries.sh {windows|macos|linux}
+#
+# Usage (macOS / Linux / Git Bash): bash scripts/fetch-binaries.sh {windows|macos|linux}
+# Usage (Windows PowerShell):       pwsh -File scripts/fetch-binaries.ps1 -Platform <windows|macos|linux>
 #
 # ffmpeg comes from ffmpeg-static (native per-arch static builds), so modern
 # macOS (Apple Silicon) gets a real arm64 binary — no Rosetta required.

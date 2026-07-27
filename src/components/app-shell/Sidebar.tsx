@@ -1,4 +1,4 @@
-import { Home, Download, History, Settings, Plus, Waves } from "lucide-react";
+import { Home, Download, History, Settings, Plus } from "lucide-react";
 import { useUiStore, type Page } from "@/stores/uiStore";
 
 const NAV: { page: Page; label: string; icon: typeof Home }[] = [
@@ -21,7 +21,7 @@ export function Sidebar() {
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-outline-variant bg-surface-container-low">
       <div className="flex items-center gap-2 px-4 py-4 font-display text-xl text-on-surface">
-        <Waves className="size-5 text-primary" strokeWidth={1} />
+        <img src="/FLUSS_LOGO.png" alt="" className="size-6 object-contain" />
         Fluss
       </div>
 

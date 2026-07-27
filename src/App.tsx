@@ -1,5 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { AppShell } from "@/components/app-shell/AppShell";
+import { TitleBar } from "@/components/app-shell/TitleBar";
+import { ResizeHandles } from "@/components/app-shell/ResizeHandles";
 import { Toaster } from "@/components/common/Toaster";
 import { HomePage } from "@/pages/HomePage";
 import { DownloadsPage } from "@/pages/DownloadsPage";
@@ -28,23 +30,27 @@ function App() {
   useDownloadEvents();
 
   return (
-    <>
-      <AppShell>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={page}
-            variants={pageTransition}
-            initial="hidden"
-            animate="show"
-            exit="exit"
-            className="h-full"
-          >
-            <Page />
-          </motion.div>
-        </AnimatePresence>
-      </AppShell>
+    <div className="flex h-screen flex-col">
+      <TitleBar />
+      <div className="min-h-0 flex-1">
+        <AppShell>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={page}
+              variants={pageTransition}
+              initial="hidden"
+              animate="show"
+              exit="exit"
+              className="h-full"
+            >
+              <Page />
+            </motion.div>
+          </AnimatePresence>
+        </AppShell>
+      </div>
       <Toaster />
-    </>
+      <ResizeHandles />
+    </div>
   );
 }
 
