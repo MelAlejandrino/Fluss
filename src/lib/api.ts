@@ -1,9 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getVersion } from "@tauri-apps/api/app";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { RELEASES_API } from "@/lib/appInfo";
 import type { VideoMetadata, DownloadOptions } from "@/types/media";
 import type { DownloadProgressEvent, DownloadHistoryItem } from "@/types/download";
 import type { Settings, EngineVersions } from "@/types/settings";
+
+interface LatestRelease {
+  version: string;
+  url: string;
+}
 
 interface DownloadResult {
   filePath: string;
@@ -33,6 +40,25 @@ export const api = {
   async pickDirectory(defaultPath?: string): Promise<string | null> {
     const selected = await openDialog({ directory: true, multiple: false, defaultPath });
     return typeof selected === "string" ? selected : null;
+  },
+
+  appVersion() {
+    return getVersion();
+  },
+
+  openUrl(url: string) {
+    return invoke("open_url", { url });
+  },
+
+  // Latest *published* GitHub release (drafts don't appear). null if none yet.
+  async getLatestRelease(): Promise<LatestRelease | null> {
+    const res = await fetch(RELEASES_API, {
+      headers: { Accept: "application/vnd.github+json" },
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+    const data = await res.json();
+    return { version: String(data.tag_name).replace(/^v/, ""), url: String(data.html_url) };
   },
 
   openFile(path: string) {

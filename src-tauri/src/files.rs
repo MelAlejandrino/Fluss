@@ -16,6 +16,14 @@ pub fn open_file(app: AppHandle, path: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// Open a URL in the default browser.
+#[tauri::command]
+pub fn open_url(app: AppHandle, url: String) -> Result<(), String> {
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
 /// Reveal a file in the OS file manager, highlighting it.
 #[tauri::command]
 pub fn reveal_in_folder(app: AppHandle, path: String) -> Result<(), String> {

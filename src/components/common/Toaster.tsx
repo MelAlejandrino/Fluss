@@ -30,7 +30,29 @@ export function Toaster() {
               className="pointer-events-auto flex items-start gap-3 rounded border border-outline-variant bg-surface-container-lowest px-4 py-3 shadow-sm"
             >
               <Icon className={`mt-0.5 size-4 shrink-0 ${className}`} strokeWidth={1.5} />
-              <p className="flex-1 text-sm text-on-surface">{t.message}</p>
+              <div className="flex flex-1 flex-col gap-2">
+                <p className="text-sm text-on-surface">{t.message}</p>
+                {t.actions && t.actions.length > 0 && (
+                  <div className="flex gap-2">
+                    {t.actions.map((a) => (
+                      <button
+                        key={a.label}
+                        onClick={() => {
+                          a.onClick?.();
+                          dismiss(t.id);
+                        }}
+                        className={
+                          a.primary
+                            ? "rounded bg-primary px-3 py-1 text-xs font-medium text-on-primary hover:bg-primary/90 active:scale-[0.98]"
+                            : "rounded border border-outline-variant px-3 py-1 text-xs font-medium text-on-surface hover:border-outline"
+                        }
+                      >
+                        {a.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => dismiss(t.id)}
                 aria-label="Dismiss"

@@ -9,6 +9,7 @@ import { useUiStore } from "@/stores/uiStore";
 import { useDownloadEvents } from "@/hooks/useDownloadEvents";
 import { useSettingsInit } from "@/hooks/useSettings";
 import { useTheme } from "@/hooks/useTheme";
+import { useUpdateCheck } from "@/hooks/useUpdate";
 import { pageTransition } from "@/lib/motion";
 
 const PAGES = {
@@ -23,6 +24,7 @@ function App() {
   const Page = PAGES[page];
   useSettingsInit();
   useTheme();
+  useUpdateCheck();
   useDownloadEvents();
 
   return (

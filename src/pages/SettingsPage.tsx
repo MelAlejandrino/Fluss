@@ -1,4 +1,4 @@
-import { FolderClosed } from "lucide-react";
+import { FolderClosed, ExternalLink, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Toggle } from "@/components/common/Toggle";
 import { Segmented } from "@/components/common/Segmented";
@@ -29,7 +29,17 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
 }
 
 export function SettingsPage() {
-  const { settings, update, engine, chooseDefaultDirectory } = useSettings();
+  const {
+    settings,
+    update,
+    engine,
+    appVersion,
+    developer,
+    repoUrl,
+    chooseDefaultDirectory,
+    openRepository,
+    checkForUpdates,
+  } = useSettings();
 
   return (
     <div className="mx-auto max-w-2xl px-8 py-10">
@@ -101,6 +111,31 @@ export function SettingsPage() {
         <Row label="FFmpeg">
           <span className="font-mono text-xs text-on-surface-variant">{engine.ffmpeg}</span>
         </Row>
+      </Section>
+
+      <Section title="About">
+        <Row label="Version">
+          <span className="font-mono text-xs text-on-surface-variant">{appVersion || "—"}</span>
+        </Row>
+        <Row label="Developer">
+          <span className="text-sm text-on-surface-variant">{developer}</span>
+        </Row>
+        <Row label="Repository">
+          <button
+            onClick={openRepository}
+            className="inline-flex items-center gap-1.5 font-mono text-xs text-primary hover:underline"
+          >
+            <ExternalLink className="size-4" strokeWidth={1.5} />
+            {repoUrl.replace("https://", "")}
+          </button>
+        </Row>
+        <button
+          onClick={checkForUpdates}
+          className="inline-flex w-fit items-center gap-2 rounded border border-outline-variant px-4 py-2 text-sm font-medium text-on-surface hover:border-outline"
+        >
+          <RefreshCw className="size-4" strokeWidth={1.5} />
+          Check for updates
+        </button>
       </Section>
     </div>
   );

@@ -15,6 +15,7 @@ const DEFAULTS: Settings = {
 interface SettingsState {
   settings: Settings;
   engine: EngineVersions;
+  appVersion: string;
   loaded: boolean;
   load: () => Promise<void>;
   update: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
@@ -23,16 +24,19 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   settings: DEFAULTS,
   engine: { ytDlp: "…", ffmpeg: "…" },
+  appVersion: "",
   loaded: false,
   load: async () => {
-    const [stored, dir, engine] = await Promise.all([
+    const [stored, dir, engine, appVersion] = await Promise.all([
       api.getSettings().catch(() => null),
       api.defaultDownloadDir().catch(() => ""),
       api.engineVersions().catch(() => ({ ytDlp: "unknown", ffmpeg: "unknown" })),
+      api.appVersion().catch(() => ""),
     ]);
     set({
       settings: { ...DEFAULTS, defaultDownloadDirectory: dir, ...(stored ?? {}) },
       engine,
+      appVersion,
       loaded: true,
     });
   },

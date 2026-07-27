@@ -17,6 +17,7 @@ pub fn run() {
             download::cancel_download,
             files::open_file,
             files::reveal_in_folder,
+            files::open_url,
             history::get_history,
             history::save_history,
             settings::get_settings,

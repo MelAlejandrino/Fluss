@@ -15,6 +15,8 @@ and FFmpeg.
 - Download queue (one at a time, auto-advances)
 - Persistent history with open / show in folder / download again / remove
 - Settings: default folder, theme (light/dark/system), auto-start, notifications
+- Update check on launch + manual "Check for updates", with an About section
+  (version, developer, repository link)
 - yt-dlp, FFmpeg, and Deno bundled — nothing to install
 
 **Install**
