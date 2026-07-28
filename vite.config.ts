@@ -15,6 +15,13 @@ export default defineConfig(async () => ({
     },
   },
 
+  // `globals: true` is what gives Testing Library its automatic cleanup between
+  // tests (it hooks a global afterEach); the specs still import from vitest.
+  test: {
+    environment: "jsdom",
+    globals: true,
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

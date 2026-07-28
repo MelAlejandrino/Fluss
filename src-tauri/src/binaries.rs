@@ -79,3 +79,26 @@ fn with_exe_suffix(name: &str) -> String {
         name.to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // `resolve`/`bundled_path` need a live AppHandle, so the testable part is the
+    // platform naming they build paths from (PLAN §28 — nothing hardcoded).
+    #[test]
+    fn binary_names_carry_the_platform_suffix() {
+        let expected = if cfg!(target_os = "windows") { "yt-dlp.exe" } else { "yt-dlp" };
+        assert_eq!(with_exe_suffix("yt-dlp"), expected);
+        assert!(!with_exe_suffix("ffmpeg").is_empty());
+    }
+
+    #[test]
+    fn platform_dir_matches_the_bundled_layout() {
+        let dir = platform_dir();
+        assert!(matches!(dir, "windows" | "macos" | "linux"));
+        if cfg!(target_os = "windows") {
+            assert_eq!(dir, "windows");
+        }
+    }
+}
