@@ -3,7 +3,7 @@
 The release workflow pulls the notes for a tag from the matching `## vX.Y.Z`
 section below. Keep the newest version at the top.
 
-## v0.3.0
+## v0.3.1
 
 Fluss can now update itself, and a few rough edges found by finally testing the
 pages are gone.
