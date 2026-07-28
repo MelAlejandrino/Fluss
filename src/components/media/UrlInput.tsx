@@ -1,5 +1,5 @@
-import { useState } from "react";
 import { Loader2, Search } from "lucide-react";
+import { useUrlInput } from "@/hooks/useUrlInput";
 
 interface UrlInputProps {
   onSubmit: (url: string) => void;
@@ -7,13 +7,13 @@ interface UrlInputProps {
 }
 
 export function UrlInput({ onSubmit, isLoading }: UrlInputProps) {
-  const [url, setUrl] = useState("");
+  const { url, setUrl, submit } = useUrlInput(onSubmit);
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit(url);
+        submit();
       }}
       className="flex w-full gap-2"
     >
@@ -23,7 +23,9 @@ export function UrlInput({ onSubmit, isLoading }: UrlInputProps) {
         onChange={(e) => setUrl(e.target.value)}
         placeholder="Paste a video URL…"
         autoFocus
-        className="flex-1 rounded border border-outline-variant bg-surface-container-low px-3 py-2 font-mono text-sm text-on-surface placeholder:text-on-surface-variant/60 focus:border-2 focus:border-primary focus:outline-none"
+        // Focus ring is an outline, not a thicker border — a border-width change
+        // resizes the input and reflows the whole centered column.
+        className="flex-1 rounded border border-outline-variant bg-surface-container-low px-3 py-2 font-mono text-sm text-on-surface placeholder:text-on-surface-variant/60 focus:border-primary focus:outline-2 focus:-outline-offset-2 focus:outline-primary"
       />
       <button
         type="submit"
