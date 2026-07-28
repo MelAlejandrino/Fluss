@@ -3,6 +3,33 @@
 The release workflow pulls the notes for a tag from the matching `## vX.Y.Z`
 section below. Keep the newest version at the top.
 
+## v0.4.0
+
+**Features**
+- Bulk download mode — paste multiple URLs at once and download them all in
+  sequence. A segmented control on Home lets you switch between single-URL
+  preview and a scrollable multi-URL list, both sharing the same format,
+  quality, and folder settings.
+- Live metadata resolution during download — yt-dlp now reports the title and
+  thumbnail as soon as it resolves them, so bulk-queued items (which skip the
+  upfront analyze step) show a real name and thumbnail instead of a raw URL and
+  an empty frame.
+- Reusable Thumbnail component with a 16:9 aspect-ratio frame and a fallback
+  icon, used by download cards and bulk items alike.
+
+**Fixes**
+- Deduplicate URLs in bulk mode — a stray double-paste no longer downloads the
+  same video twice.
+- Disabled "Download" button when no valid URLs are entered, preventing
+  submission of an empty list.
+
+**Install**
+- Windows: run the `.exe` (or `.msi`) installer (SmartScreen: More info → Run anyway)
+- macOS (Apple Silicon): open the `.dmg`, drag Fluss to Applications. This build
+  is unsigned, so first launch: right-click the app → **Open** (or run
+  `xattr -cr /Applications/Fluss.app` to clear quarantine).
+- Linux: `.AppImage` (make it executable: `chmod +x Fluss*.AppImage`) or `.deb`
+
 ## v0.3.2
 
 **Fixes**
