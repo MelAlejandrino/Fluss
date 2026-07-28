@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import type { DownloadItem } from "@/types/download";
 import { DownloadCard } from "./DownloadCard";
 import { DownloadStatus } from "./DownloadStatus";
+import { Thumbnail } from "./Thumbnail";
 import { staggerContainer, staggerItem } from "@/lib/motion";
 
 interface DownloadQueueProps {
@@ -59,12 +60,15 @@ export function DownloadQueue({
                 data-menu-id={item.id}
                 className="flex items-center justify-between gap-3 border-b border-outline-variant px-4 py-3 last:border-b-0"
               >
-                <div className="min-w-0">
-                  <p className="truncate text-sm text-on-surface">{item.title ?? item.url}</p>
-                  <p className="font-mono text-[11px] uppercase tracking-widest text-on-surface-variant">
-                    {item.format}
-                    {item.quality ? ` · ${item.quality}` : ""}
-                  </p>
+                <div className="flex min-w-0 items-center gap-3">
+                  <Thumbnail src={item.thumbnailUrl} className="w-16" />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-on-surface">{item.title ?? item.url}</p>
+                    <p className="font-mono text-[11px] uppercase tracking-widest text-on-surface-variant">
+                      {item.format}
+                      {item.quality ? ` · ${item.quality}` : ""}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-4">
                   <DownloadStatus status={item.status} />

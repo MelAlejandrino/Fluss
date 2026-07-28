@@ -6,13 +6,16 @@ vi.mock("@/lib/api", () => ({
   api: {
     analyzeUrl: vi.fn(),
     pickDirectory: vi.fn(),
-    startDownload: vi.fn(),
-    saveHistory: vi.fn(),
-    notifyDesktop: vi.fn(),
+    // Never settles — enqueuing (bulk or single) kicks off the queue
+    // automatically, and these tests only care that it started, not finished.
+    startDownload: vi.fn(() => new Promise(() => {})),
+    saveHistory: vi.fn(() => Promise.resolve()),
+    notifyDesktop: vi.fn(() => Promise.resolve()),
   },
 }));
 
 import { api } from "@/lib/api";
+import { useDownloadStore } from "@/stores/downloadStore";
 import { HomePage } from "./HomePage";
 
 const META = {
@@ -37,6 +40,7 @@ function submit() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useDownloadStore.setState({ downloads: [] });
 });
 
 describe("HomePage — empty state (PLAN §11)", () => {
@@ -169,5 +173,117 @@ describe("HomePage — error state (PLAN §26)", () => {
     await screen.findByText("A Video");
     expect(analyzeUrl).toHaveBeenCalledTimes(2);
     expect(analyzeUrl).toHaveBeenLastCalledWith("https://site/watch?v=abc");
+  });
+});
+
+describe("HomePage — bulk mode", () => {
+  function switchToBulk() {
+    render(<HomePage />);
+    fireEvent.click(screen.getByRole("tab", { name: "Bulk" }));
+  }
+
+  function urlInputs() {
+    return screen.getAllByPlaceholderText(/Video URL \d+…/) as HTMLInputElement[];
+  }
+
+  it("starts with two empty links and no analyze step", () => {
+    switchToBulk();
+    expect(urlInputs()).toHaveLength(2);
+    expect(screen.queryByPlaceholderText("Paste a video URL…")).toBeNull();
+    expect(analyzeUrl).not.toHaveBeenCalled();
+  });
+
+  it("adds more link fields on demand", () => {
+    switchToBulk();
+    fireEvent.click(screen.getByRole("button", { name: "Add link" }));
+    expect(urlInputs()).toHaveLength(3);
+  });
+
+  it("blocks the download without a folder, without touching the backend", () => {
+    switchToBulk();
+    const [first, second] = urlInputs();
+    fireEvent.change(first, { target: { value: "https://site/watch?v=a" } });
+    fireEvent.change(second, { target: { value: "https://site/watch?v=b" } });
+    fireEvent.click(screen.getByRole("button", { name: /Download 2 links/ }));
+    expect(api.startDownload).not.toHaveBeenCalled();
+    expect(useDownloadStore.getState().downloads).toHaveLength(0);
+  });
+
+  it("dedupes blank and repeated links, queues the rest by bare URL", async () => {
+    vi.mocked(api.pickDirectory).mockResolvedValue("/downloads");
+    switchToBulk();
+    fireEvent.click(screen.getByRole("button", { name: "Add link" }));
+    const [first, second, third] = urlInputs();
+    fireEvent.change(first, { target: { value: "https://site/watch?v=a" } });
+    fireEvent.change(second, { target: { value: "https://site/watch?v=a" } }); // duplicate
+    fireEvent.change(third, { target: { value: "  " } }); // blank
+
+    fireEvent.click(screen.getByRole("button", { name: "No folder selected" }));
+    await screen.findByText("/downloads");
+
+    fireEvent.click(screen.getByRole("button", { name: /Download 1 link/ }));
+
+    const downloads = useDownloadStore.getState().downloads;
+    expect(downloads).toHaveLength(1);
+    expect(downloads[0].url).toBe("https://site/watch?v=a");
+    // Starts immediately on a bare URL — no analyze round-trip first. Its
+    // metadata comes from the download itself.
+    expect(downloads[0].title).toBeUndefined();
+    expect(analyzeUrl).not.toHaveBeenCalled();
+  });
+
+  it("backfills metadata for links still waiting in the queue", async () => {
+    vi.mocked(api.pickDirectory).mockResolvedValue("/downloads");
+    analyzeUrl.mockResolvedValue(META);
+    switchToBulk();
+    const [first, second] = urlInputs();
+    fireEvent.change(first, { target: { value: "https://site/watch?v=a" } });
+    fireEvent.change(second, { target: { value: "https://site/watch?v=b" } });
+    fireEvent.click(screen.getByRole("button", { name: "No folder selected" }));
+    await screen.findByText("/downloads");
+    fireEvent.click(screen.getByRole("button", { name: /Download 2 links/ }));
+
+    await waitFor(() => {
+      const queued = useDownloadStore.getState().downloads.find((d) => d.status === "queued");
+      expect(queued?.title).toBe("A Video");
+      expect(queued?.thumbnailUrl).toBe("https://img/1.jpg");
+    });
+    // Only the waiting one — the active download reports its own metadata.
+    expect(analyzeUrl).toHaveBeenCalledTimes(1);
+    expect(analyzeUrl).toHaveBeenCalledWith("https://site/watch?v=b");
+  });
+
+  it("fails a bad queued link right away instead of waiting for its turn", async () => {
+    vi.mocked(api.pickDirectory).mockResolvedValue("/downloads");
+    analyzeUrl.mockRejectedValue("ERROR: [generic] Unsupported URL: nonsense");
+    switchToBulk();
+    const [first, second] = urlInputs();
+    fireEvent.change(first, { target: { value: "https://site/watch?v=a" } });
+    fireEvent.change(second, { target: { value: "nonsense" } });
+    fireEvent.click(screen.getByRole("button", { name: "No folder selected" }));
+    await screen.findByText("/downloads");
+    fireEvent.click(screen.getByRole("button", { name: /Download 2 links/ }));
+
+    await waitFor(() => {
+      const bad = useDownloadStore.getState().downloads.find((d) => d.url === "nonsense");
+      expect(bad?.status).toBe("failed");
+      expect(bad?.error).toBe("This link isn't supported. Check the URL, or try a different source.");
+      // Raw engine text stays behind "View details" (PLAN §26).
+      expect(bad?.errorDetails).toBe("ERROR: [generic] Unsupported URL: nonsense");
+    });
+    // Never handed to the downloader — rejected before its turn came up. Only
+    // the first, valid link was started.
+    expect(api.startDownload).toHaveBeenCalledTimes(1);
+    // One attempt, not a loop spinning on the same bad URL.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(analyzeUrl).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables the button until at least one link is entered", () => {
+    switchToBulk();
+    expect(screen.getByRole("button", { name: /Download 0 links/ })).toHaveProperty(
+      "disabled",
+      true,
+    );
   });
 });

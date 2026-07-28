@@ -12,7 +12,7 @@ import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { check as checkForUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import type { VideoMetadata, DownloadOptions } from "@/types/media";
-import type { DownloadProgressEvent, DownloadHistoryItem } from "@/types/download";
+import type { DownloadProgressEvent, DownloadMetaEvent, DownloadHistoryItem } from "@/types/download";
 import type { Settings, EngineVersions } from "@/types/settings";
 
 export type ResizeDir =
@@ -45,6 +45,10 @@ export const api = {
 
   onDownloadProgress(handler: (event: DownloadProgressEvent) => void) {
     return listen<DownloadProgressEvent>("download-progress", (e) => handler(e.payload));
+  },
+
+  onDownloadMeta(handler: (event: DownloadMetaEvent) => void) {
+    return listen<DownloadMetaEvent>("download-meta", (e) => handler(e.payload));
   },
 
   async pickDirectory(defaultPath?: string): Promise<string | null> {

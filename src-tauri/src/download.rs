@@ -15,6 +15,7 @@ use crate::binaries;
 // stderr output (warnings, errors).
 const PROGRESS_TAG: &str = "__FLUSSPROGRESS__";
 const FILE_TAG: &str = "__FLUSSFILE__";
+const META_TAG: &str = "__FLUSSMETA__";
 const PROGRESS_TEMPLATE: &str = concat!(
     "download:__FLUSSPROGRESS__ ",
     "%(progress.downloaded_bytes)s %(progress.total_bytes)s ",
@@ -50,6 +51,29 @@ struct ProgressEvent {
     speed: Option<f64>,
     eta: Option<f64>,
     status: String,
+}
+
+/// Fired once per download as soon as yt-dlp resolves the metadata — before any
+/// bytes move. Lets bulk items (enqueued from a bare URL, no upfront analyze)
+/// pick up a real title and thumbnail instead of the raw URL and a blank frame.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct MetaEvent {
+    download_id: String,
+    title: String,
+    thumbnail_url: Option<String>,
+}
+
+/// Splits a `__FLUSSMETA__` payload. Thumbnail URLs contain no spaces, so the
+/// title is simply everything after the first one. Missing fields arrive as the
+/// literal "NA" from yt-dlp.
+fn parse_meta(id: &str, payload: &str) -> MetaEvent {
+    let (thumb, title) = payload.split_once(' ').unwrap_or((payload, ""));
+    MetaEvent {
+        download_id: id.to_string(),
+        title: title.to_string(),
+        thumbnail_url: (thumb != "NA" && !thumb.is_empty()).then(|| thumb.to_string()),
+    }
 }
 
 #[derive(Clone)]
@@ -272,6 +296,8 @@ fn run_to_completion(
             }
         } else if let Some(path) = line.trim().strip_prefix(FILE_TAG) {
             file_path = path.to_string();
+        } else if let Some(meta) = line.trim().strip_prefix(META_TAG) {
+            let _ = app.emit("download-meta", parse_meta(&id, meta));
         }
     }
 
@@ -399,6 +425,9 @@ fn build_args(options: &DownloadOptions, ffmpeg: Option<&Path>) -> Vec<String> {
     args.push("-o".into());
     args.push(output_template);
     args.push("--print".into());
+    // Thumbnail first — it has no spaces, so the title can be the rest of the line.
+    args.push(format!("before_dl:{META_TAG}%(thumbnail)s %(title)s"));
+    args.push("--print".into());
     args.push(format!("after_move:{FILE_TAG}%(filepath)s"));
     args.push(options.url.clone());
     args
@@ -428,6 +457,32 @@ mod tests {
         assert!(args.windows(2).any(|w| w == ["--encoding", "utf-8"]));
         // Resolution in the filename so qualities don't collide.
         assert!(args.iter().any(|a| a.contains("%(title)s [%(height)sp].%(ext)s")));
+        // Title + thumbnail resolve before download starts (bulk-queued items
+        // have no upfront analyze to get them from otherwise).
+        assert!(args
+            .iter()
+            .any(|a| a.contains("before_dl:__FLUSSMETA__%(thumbnail)s %(title)s")));
+    }
+
+    #[test]
+    fn meta_splits_thumbnail_from_title() {
+        let ev = parse_meta("d1", "https://img/1.jpg A Video");
+        assert_eq!(ev.thumbnail_url.as_deref(), Some("https://img/1.jpg"));
+        assert_eq!(ev.title, "A Video");
+        // Titles with spaces survive — only the first space is a separator.
+        let ev = parse_meta("d1", "https://img/1.jpg A Video: Part 2");
+        assert_eq!(ev.title, "A Video: Part 2");
+    }
+
+    #[test]
+    fn meta_tolerates_a_missing_thumbnail() {
+        let ev = parse_meta("d1", "NA A Video");
+        assert_eq!(ev.thumbnail_url, None);
+        assert_eq!(ev.title, "A Video");
+        // No space at all: nothing usable, but it must not panic.
+        let ev = parse_meta("d1", "NA");
+        assert_eq!(ev.thumbnail_url, None);
+        assert_eq!(ev.title, "");
     }
 
     #[test]

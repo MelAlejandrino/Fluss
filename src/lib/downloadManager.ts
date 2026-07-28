@@ -3,7 +3,7 @@ import { useUiStore } from "@/stores/uiStore";
 import { useHistoryStore } from "@/stores/historyStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { api } from "@/lib/api";
-import { CANCELLED, friendlyError, errorDetails } from "@/lib/errors";
+import { CANCELLED, friendlyError, errorDetails, ANALYZE_FALLBACK } from "@/lib/errors";
 import { notify } from "@/lib/toast";
 import type { DownloadItem } from "@/types/download";
 import type { DownloadFormat, VideoQuality } from "@/types/media";
@@ -53,11 +53,66 @@ export function enqueue(input: EnqueueInput) {
   if (useSettingsStore.getState().settings.autoStartDownloads) {
     processQueue();
   }
+  // After processQueue, so whatever just started is skipped — it gets its
+  // metadata from the download itself.
+  void prefetchMetadata();
 }
 
 /// Manually kick the queue (Start button when auto-start is off).
 export function startQueue() {
   processQueue();
+}
+
+// Bulk enqueues bare URLs, so queued items have no title or thumbnail until
+// their own download starts. This resolves them ahead of time — and surfaces a
+// dead link immediately instead of letting it sit in the queue looking fine
+// until its turn comes. Strictly one analysis at a time so it never crowds the
+// download itself.
+let prefetching = false;
+
+async function prefetchMetadata() {
+  if (prefetching) return;
+  prefetching = true;
+  try {
+    for (;;) {
+      // Re-read each pass: enqueue keeps adding while this runs. Every branch
+      // below either sets a title or moves the item out of "queued", so a
+      // failure can't put this loop in a spin.
+      const pending = useDownloadStore
+        .getState()
+        .downloads.find((d) => d.status === "queued" && !d.title);
+      if (!pending) return;
+
+      try {
+        const meta = await api.analyzeUrl(pending.url);
+        // It may have started, finished, or been removed while we waited.
+        const current = useDownloadStore.getState().downloads.find((d) => d.id === pending.id);
+        if (current && !current.title) {
+          useDownloadStore.getState().update(pending.id, {
+            title: meta.title,
+            thumbnailUrl: meta.thumbnailUrl,
+          });
+        }
+      } catch (err) {
+        const current = useDownloadStore.getState().downloads.find((d) => d.id === pending.id);
+        // Only fail it if it's *still* waiting. If it started downloading while
+        // we were analyzing, that process owns the outcome — overwriting its
+        // status here would kill a download that may well succeed.
+        if (current?.status !== "queued") continue;
+        const raw = typeof err === "string" ? err : String(err);
+        useDownloadStore.getState().update(pending.id, {
+          status: "failed",
+          error: friendlyError(raw, ANALYZE_FALLBACK),
+          errorDetails: errorDetails(raw),
+        });
+        recordHistory(current, "failed");
+        // No toast: a bulk paste with several dead links would fire one per
+        // link. The card carries the reason, on the page enqueue just opened.
+      }
+    }
+  } finally {
+    prefetching = false;
+  }
 }
 
 export function cancel(id: string) {

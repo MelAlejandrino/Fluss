@@ -1,6 +1,7 @@
 import type { DownloadFormat, VideoQuality } from "./media";
 
-// No "analyzing" — analysis happens on Home before an item is ever enqueued.
+// No "analyzing" — an item is either enqueued straight from a URL (bulk) or
+// after Home's preview step (single); either way it starts at "queued".
 export type DownloadStatus =
   | "queued"
   | "downloading"
@@ -54,6 +55,13 @@ export interface DownloadProgressEvent {
   speed?: number;
   eta?: number;
   status: string;
+}
+
+/** Fired once per download when yt-dlp resolves metadata, before bytes move. */
+export interface DownloadMetaEvent {
+  downloadId: string;
+  title: string;
+  thumbnailUrl?: string;
 }
 
 export interface DownloadCardProps {

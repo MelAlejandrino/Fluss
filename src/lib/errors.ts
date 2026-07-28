@@ -2,6 +2,10 @@
 // the engine's stderr to something a person can act on; the raw text still goes
 // into the "View details" section so nothing is hidden.
 
+/** Shown when analysis fails for a reason none of the patterns below recognise. */
+export const ANALYZE_FALLBACK =
+  "Unable to analyze this URL. It may be private, unavailable, or unsupported.";
+
 /** Distinct signal from Rust for a user cancellation (vs. a real failure). */
 export const CANCELLED = "__CANCELLED__";
 export const NO_OUTPUT_DIR = "__NODIR__";

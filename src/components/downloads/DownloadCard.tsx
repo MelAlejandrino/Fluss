@@ -2,6 +2,7 @@ import { X, FolderOpen, Play, RotateCcw, AlertTriangle } from "lucide-react";
 import type { DownloadCardProps } from "@/types/download";
 import { DownloadStatus } from "./DownloadStatus";
 import { DownloadProgress } from "./DownloadProgress";
+import { Thumbnail } from "./Thumbnail";
 
 export function DownloadCard({ item, onOpen, onReveal, onCancel, onRetry }: DownloadCardProps) {
   const showProgress = item.status === "downloading" || item.status === "processing";
@@ -14,11 +15,7 @@ export function DownloadCard({ item, onOpen, onReveal, onCancel, onRetry }: Down
       data-menu-id={item.id}
       className="flex gap-4 rounded-sm border border-outline-variant bg-surface-container-low p-4 transition-colors hover:border-outline"
     >
-      <div className="aspect-video w-32 shrink-0 overflow-hidden rounded-sm border border-outline-variant bg-surface-container-high">
-        {item.thumbnailUrl && (
-          <img src={item.thumbnailUrl} alt="" className="size-full object-cover" />
-        )}
-      </div>
+      <Thumbnail src={item.thumbnailUrl} />
 
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex items-start justify-between gap-3">

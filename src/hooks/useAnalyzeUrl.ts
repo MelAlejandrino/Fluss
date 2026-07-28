@@ -1,10 +1,7 @@
 import { useRef, useState } from "react";
 import type { VideoMetadata } from "@/types/media";
 import { api } from "@/lib/api";
-import { friendlyError, errorDetails } from "@/lib/errors";
-
-const ANALYZE_FALLBACK =
-  "Unable to analyze this URL. It may be private, unavailable, or unsupported.";
+import { friendlyError, errorDetails, ANALYZE_FALLBACK } from "@/lib/errors";
 
 export function useAnalyzeUrl() {
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null);
