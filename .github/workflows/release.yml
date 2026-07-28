@@ -31,9 +31,10 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
             librsvg2-dev patchelf build-essential curl wget file libssl-dev libgtk-3-dev xvfb
 
+      # Kept in step with ci.yml (see the note there on Node 22).
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - uses: dtolnay/rust-toolchain@stable
 

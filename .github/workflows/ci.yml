@@ -30,9 +30,12 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
             librsvg2-dev patchelf build-essential libssl-dev libgtk-3-dev
 
+      # 22, not 20: jsdom (via undici) calls worker_threads.markAsUncloneable,
+      # which only exists from Node 22.5 — on 20 every vitest worker fails to
+      # start. Node 20 is also out of maintenance.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - uses: dtolnay/rust-toolchain@stable
 
