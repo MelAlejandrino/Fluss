@@ -78,9 +78,14 @@ jobs:
           "$D/deno$EXT" --version
 
       # Build only — no release here, so a failure can't leave a partial draft.
+      # The signing key produces the `.sig` files the in-app updater verifies;
+      # without these secrets the build fails rather than shipping unsigned
+      # artifacts nobody can update from.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       # Prove the app actually launches on Linux (catches missing webkit libs,
       # crash-on-start). Runs the built binary headlessly and checks it stays up.
@@ -110,17 +115,24 @@ jobs:
 
       # Only the distributable installers — NOT the whole bundle tree, which
       # also contains the AppImage/deb internal payload (libs, the raw binaries)
-      # that must not become release assets.
+      # that must not become release assets. The `.sig` files and the macOS
+      # `.app.tar.gz` are the updater's payload; `latest.json` (built in the
+      # release job) points at them.
       - name: Upload installers
         uses: actions/upload-artifact@v4
         with:
           name: installers-${{ matrix.engines }}
           path: |
             src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/nsis/*.sig
             src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/msi/*.sig
             src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/macos/*.app.tar.gz
+            src-tauri/target/release/bundle/macos/*.app.tar.gz.sig
             src-tauri/target/release/bundle/deb/*.deb
             src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/appimage/*.AppImage.sig
             src-tauri/target/release/bundle/rpm/*.rpm
           if-no-files-found: error
 
@@ -147,6 +159,44 @@ jobs:
           ' CHANGELOG.md > notes.md
           [ -s notes.md ] || echo "See the commit history for changes in ${GITHUB_REF_NAME}." > notes.md
 
+      # What the in-app updater reads: version + per-platform installer URL and
+      # its signature. Any missing signature fails the release rather than
+      # publishing something nobody can update from.
+      - name: Build updater manifest (latest.json)
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="${GITHUB_REF_NAME#v}"
+          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+
+          # $1 platform key (for the error message), $2 installer glob.
+          entry() {
+            local file sig
+            file=$(find artifacts -type f -name "$2" ! -name "*.sig" | head -1)
+            [ -n "$file" ] || { echo "::error::no updater artifact for $1 ($2)"; exit 1; }
+            sig="$file.sig"
+            [ -f "$sig" ] || { echo "::error::no signature next to $file"; exit 1; }
+            jq -n --arg url "$BASE/$(basename "$file")" \
+                  --arg signature "$(cat "$sig")" \
+                  '{url: $url, signature: $signature}'
+          }
+
+          # The macOS runner is arm64, so only Apple Silicon is published.
+          jq -n \
+            --arg version "$VER" \
+            --arg notes "$(cat notes.md)" \
+            --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson windows "$(entry windows-x86_64 '*-setup.exe')" \
+            --argjson darwin "$(entry darwin-aarch64 '*.app.tar.gz')" \
+            --argjson linux "$(entry linux-x86_64 '*.AppImage')" \
+            '{version: $version, notes: $notes, pub_date: $pub_date,
+              platforms: {
+                "windows-x86_64": $windows,
+                "darwin-aarch64": $darwin,
+                "linux-x86_64": $linux
+              }}' > latest.json
+          cat latest.json
+
       - name: Create draft release
         uses: softprops/action-gh-release@v2
         with:
@@ -154,4 +204,6 @@ jobs:
           name: "Fluss ${{ github.ref_name }}"
           body_path: notes.md
           draft: true
-          files: artifacts/**/*
+          files: |
+            artifacts/**/*
+            latest.json

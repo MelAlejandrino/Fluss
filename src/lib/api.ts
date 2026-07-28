@@ -9,7 +9,8 @@ import {
   sendNotification,
 } from "@tauri-apps/plugin-notification";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { RELEASES_API } from "@/lib/appInfo";
+import { check as checkForUpdate } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import type { VideoMetadata, DownloadOptions } from "@/types/media";
 import type { DownloadProgressEvent, DownloadHistoryItem } from "@/types/download";
 import type { Settings, EngineVersions } from "@/types/settings";
@@ -23,11 +24,6 @@ export type ResizeDir =
   | "SouthEast"
   | "SouthWest"
   | "West";
-
-interface LatestRelease {
-  version: string;
-  url: string;
-}
 
 interface DownloadResult {
   filePath: string;
@@ -82,15 +78,21 @@ export const api = {
     return invoke("open_url", { url });
   },
 
-  // Latest *published* GitHub release (drafts don't appear). null if none yet.
-  async getLatestRelease(): Promise<LatestRelease | null> {
-    const res = await fetch(RELEASES_API, {
-      headers: { Accept: "application/vnd.github+json" },
-    });
-    if (res.status === 404) return null;
-    if (!res.ok) throw new Error(`GitHub API ${res.status}`);
-    const data = await res.json();
-    return { version: String(data.tag_name).replace(/^v/, ""), url: String(data.html_url) };
+  // A pending signed update, or null when we're already current. The plugin
+  // does the version comparison and signature check against `latest.json`.
+  async pendingUpdate(): Promise<{ version: string } | null> {
+    const update = await checkForUpdate();
+    return update ? { version: update.version } : null;
+  },
+
+  // Downloads, verifies and installs the pending update, then restarts into it.
+  // Re-checks rather than holding the handle from `pendingUpdate` — one extra
+  // fetch of a tiny JSON file, and no Tauri object escapes this module.
+  async installUpdate(): Promise<void> {
+    const update = await checkForUpdate();
+    if (!update) return;
+    await update.downloadAndInstall();
+    await relaunch();
   },
 
   openFile(path: string) {

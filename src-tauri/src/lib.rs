@@ -20,6 +20,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        // Signed in-app updates (PLAN §29 is engine versions; this is Fluss
+        // itself). `process` provides the relaunch after install.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(download::DownloadRegistry::default())
         .setup(|app| {
             log::info!("Fluss {} started", app.package_info().version);

@@ -1,6 +1,6 @@
 [package]
 name = "fluss"
-version = "0.1.0"
+version = "0.2.0"
 description = "A minimal desktop media downloader powered by yt-dlp and FFmpeg."
 authors = ["MelAlejandrino"]
 edition = "2024"
@@ -27,4 +27,8 @@ tauri-plugin-notification = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-log = "2"
 log = "0.4"
+# Desktop-only plugins (the updater has no mobile implementation); Fluss targets
+# Windows/macOS/Linux. `process` is only here for the post-install relaunch.
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 

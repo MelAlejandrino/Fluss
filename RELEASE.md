@@ -44,6 +44,28 @@ gh release view vX.Y.Z --json isDraft --jq .isDraft   # must print: true
 
 Never run a delete/re-tag "to be safe" without this check passing first.
 
+## Updater signing (already set up — read, don't redo)
+
+The build signs the installers so the in-app updater will accept them. Both
+repository secrets are already configured; a tagged build fails without them:
+
+| Secret | Value | Status |
+|---|---|---|
+| `TAURI_SIGNING_PRIVATE_KEY` | contents of `~/.tauri/fluss-updater.key` | set |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | contents of `~/.tauri/fluss-updater.password.txt` | set |
+
+Verify rather than re-create: `gh secret list`. Only ever re-run
+`npx tauri signer generate` if the private key is genuinely lost — a new keypair
+means a new `pubkey`, and every already-installed copy of Fluss stops trusting
+updates.
+
+The matching **public** key lives in `src-tauri/tauri.conf.json`
+(`plugins.updater.pubkey`). Never change it once a release is out — installed
+copies of Fluss only trust updates signed by that exact key. Losing the private
+key means every existing install stops being updatable and users must reinstall
+by hand, so keep it backed up outside the repo. The private key must never be
+committed.
+
 ## Preconditions
 
 - Working tree is clean and on the default branch (`main`), up to date with
@@ -60,7 +82,20 @@ Never run a delete/re-tag "to be safe" without this check passing first.
    ```
    Pick the next semver bump (patch = fixes, minor = features, major = breaking).
 
-2. **Update `CHANGELOG.md`.** Add a new section at the **top**, below the intro.
+2. **Bump the version files.** Set the new version in **both** `package.json`
+   and `src-tauri/tauri.conf.json`:
+   ```bash
+   node -e "for(const f of ['package.json','src-tauri/tauri.conf.json']){const j=require('./'+f);j.version='0.2.0';require('fs').writeFileSync(f,JSON.stringify(j,null,2)+'\n')}"
+   ```
+   This is **required, not hygiene.** `tauri.conf.json` is what `getVersion()`
+   returns at runtime, which is the number the About section shows and the number
+   the in-app update check compares against. Leave it stale and every dev build
+   and every local build reports the old version and nags about an update that is
+   already installed. CI overwrites these files during the tagged build, so
+   installers are always labelled correctly either way — the commit matters for
+   everything that isn't a CI installer.
+
+3. **Update `CHANGELOG.md`.** Add a new section at the **top**, below the intro.
    The heading MUST contain the version — the workflow extracts release notes by
    matching it:
    ```markdown
@@ -74,20 +109,22 @@ Never run a delete/re-tag "to be safe" without this check passing first.
    ```
    Write the notes from the commit log above. Keep the newest version first.
 
-3. **Commit and push the changelog** to `main`:
+4. **Commit and push the bump + changelog** to `main`. One commit, and it must
+   land *before* the tag so the tag points at a commit that knows its own
+   version:
    ```bash
-   git add CHANGELOG.md
-   git commit -m "docs: changelog for v0.2.0"
+   git add CHANGELOG.md package.json src-tauri/tauri.conf.json
+   git commit -m "release: v0.2.0"
    git push origin main
    ```
 
-4. **Tag and push the tag.** This is the trigger:
+5. **Tag and push the tag.** This is the trigger:
    ```bash
    git tag v0.2.0
    git push origin v0.2.0
    ```
 
-5. **Stop and report.** Tell the user the tag is pushed and the release workflow
+6. **Stop and report.** Tell the user the tag is pushed and the release workflow
    is building the draft. Give them the Actions URL and the releases URL so they
    can review and publish:
    - Actions: `https://github.com/<owner>/<repo>/actions`
@@ -97,10 +134,16 @@ That's it. Do not take further release actions.
 
 ## Notes
 
-- **Version files** (`package.json`, `src-tauri/tauri.conf.json`) are synced to
-  the tag **inside CI** for the build, so installer filenames match the tag. You
-  don't need to bump them by hand; if you do for repo hygiene, that's fine but
-  optional.
+- **Version files** are also synced to the tag **inside CI** (`Sync app version
+  to tag` in `release.yml`), so a forgotten bump can't produce a mislabelled
+  installer. That is a safety net, not a substitute for step 2 — the sync never
+  reaches `main`, so the repo (and therefore every dev build) keeps reporting the
+  old version until you commit the bump yourself.
+- **`latest.json`** is generated in the release job and attached to the release.
+  It is the updater's endpoint
+  (`releases/latest/download/latest.json`), so the in-app update only appears
+  once the draft is **published** — drafts serve no public assets. A release
+  missing any platform's `.sig` fails the job instead of shipping.
 - **Tag format** must match `v*` or the workflow won't fire.
 - **Engines** (`yt-dlp`, `ffmpeg`, `deno`) are downloaded during CI by
   `scripts/fetch-binaries.sh` — never commit them.
