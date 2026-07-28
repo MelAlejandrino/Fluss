@@ -3,6 +3,22 @@
 The release workflow pulls the notes for a tag from the matching `## vX.Y.Z`
 section below. Keep the newest version at the top.
 
+## v0.3.2
+
+**Fixes**
+- "Open file" and "Show in folder" work for downloads whose title contains an
+  emoji. yt-dlp was reporting the finished file's path with the emoji stripped
+  out, so Fluss remembered a name that didn't exist on disk and both actions
+  came back with "This file was moved or deleted." Re-download anything already
+  in your history to repair its stored path.
+
+**Install**
+- Windows: run the `.exe` (or `.msi`) installer (SmartScreen: More info → Run anyway)
+- macOS (Apple Silicon): open the `.dmg`, drag Fluss to Applications. This build
+  is unsigned, so first launch: right-click the app → **Open** (or run
+  `xattr -cr /Applications/Fluss.app` to clear quarantine).
+- Linux: `.AppImage` (make it executable: `chmod +x Fluss*.AppImage`) or `.deb`
+
 ## v0.3.1
 
 Fluss can now update itself, and a few rough edges found by finally testing the
