@@ -351,6 +351,12 @@ fn build_args(options: &DownloadOptions, ffmpeg: Option<&Path>) -> Vec<String> {
     };
 
     let mut args: Vec<String> = vec![
+        // The frozen yt-dlp.exe ignores PYTHONUTF8/PYTHONIOENCODING and encodes
+        // `--print` output with the ANSI codepage using errors='ignore', so
+        // astral chars (emoji) are silently dropped from the path we capture and
+        // open/reveal then can't find the file. This forces UTF-8 on its side.
+        "--encoding".into(),
+        "utf-8".into(),
         "--no-playlist".into(),
         "--no-simulate".into(),
         "--newline".into(),
@@ -418,6 +424,8 @@ mod tests {
         let args = build_args(&opts("mp4"), None);
         assert!(args.windows(2).any(|w| w == ["--merge-output-format", "mp4"]));
         assert_eq!(args.last().unwrap(), "https://example.com/watch?v=x");
+        // Without this the captured %(filepath)s loses emoji and open/reveal 404s.
+        assert!(args.windows(2).any(|w| w == ["--encoding", "utf-8"]));
         // Resolution in the filename so qualities don't collide.
         assert!(args.iter().any(|a| a.contains("%(title)s [%(height)sp].%(ext)s")));
     }
