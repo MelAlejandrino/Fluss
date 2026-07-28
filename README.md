@@ -28,9 +28,10 @@ Fluss is a desktop application that turns media URLs into downloaded files — n
 Built with [Tauri 2](https://tauri.app/) and [React 19](https://react.dev/), Fluss bundles its own copies of [yt-dlp](https://github.com/yt-dlp/yt-dlp) and [FFmpeg](https://ffmpeg.org/) — nothing extra to install.
 
 <p align="center">
-  <img src="./public/Fluss App Screenshots/Fluss Home Page With Link.png" alt="Fluss Home Page showing a URL being analyzed" width="600">
+  <img src="./public/Fluss App Screenshots/Fluss Home Page With Link Single.png" alt="Fluss Home Page — single link analysis" width="350">
+  <img src="./public/Fluss App Screenshots/Fluss Home Page With Link Bulk.png" alt="Fluss Home Page — bulk link analysis" width="350">
   <br>
-  <em>The home page — paste a link and see a preview before you download.</em>
+  <em>The home page — paste a single link to preview before downloading, or bulk-import multiple URLs to analyze and download together.</em>
 </p>
 
 ---
