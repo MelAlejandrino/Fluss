@@ -3,6 +3,47 @@
 The release workflow pulls the notes for a tag from the matching `## vX.Y.Z`
 section below. Keep the newest version at the top.
 
+## v0.2.0
+
+Better behaviour when things go wrong, a real right-click menu, and a handful
+of rough edges smoothed out.
+
+**Features**
+- Custom right-click menu throughout the app, replacing the browser one. It
+  adapts to what you click: paste-and-analyze on the URL field, open / show in
+  folder / copy path / retry on downloads and history entries, and navigation
+  anywhere else.
+- Failed downloads now explain themselves — a plain-language reason, the raw
+  engine output tucked behind "View details", and a Retry button. Previously a
+  failure showed only a red "Failed" chip.
+- Error messages are written for people, not parsed from yt-dlp. Unavailable or
+  private media, age restrictions, unsupported links, network trouble, timeouts,
+  a full disk, missing write permission, and unavailable qualities each get
+  their own message.
+- Desktop notifications are real OS notifications now, and failures notify too
+  (previously only successes did, and only as an in-app toast).
+- Fluss asks before quitting while a download is running, and cleans up partial
+  files left behind by a failed or cancelled download.
+- Downloads default to your Videos folder.
+- Diagnostic logging to a file, so a misbehaving download can be reported.
+  URLs are deliberately excluded — they can carry access tokens.
+
+**Fixes**
+- The download folder is checked before a download starts, so a folder that was
+  moved or deleted fails immediately with a clear message instead of an opaque
+  engine error minutes later.
+- Focusing the URL field no longer nudges the heading and Analyze button.
+- The sidebar collapses to icons on narrow windows instead of crowding the page.
+- Escape closes the quit confirmation, which is also now dismissable by clicking
+  outside it and readable by screen readers.
+
+**Install**
+- Windows: run the `.exe` (or `.msi`) installer (SmartScreen: More info → Run anyway)
+- macOS (Apple Silicon): open the `.dmg`, drag Fluss to Applications. This build
+  is unsigned, so first launch: right-click the app → **Open** (or run
+  `xattr -cr /Applications/Fluss.app` to clear quarantine).
+- Linux: `.AppImage` (make it executable: `chmod +x Fluss*.AppImage`) or `.deb`
+
 ## v0.1.0
 
 First release of Fluss — a minimal desktop media downloader powered by yt-dlp
