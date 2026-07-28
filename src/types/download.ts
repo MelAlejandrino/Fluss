@@ -1,8 +1,8 @@
 import type { DownloadFormat, VideoQuality } from "./media";
 
+// No "analyzing" — analysis happens on Home before an item is ever enqueued.
 export type DownloadStatus =
   | "queued"
-  | "analyzing"
   | "downloading"
   | "processing"
   | "completed"

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { VideoMetadata } from "@/types/media";
 import { api } from "@/lib/api";
 import { friendlyError, errorDetails } from "@/lib/errors";
@@ -13,14 +13,19 @@ export function useAnalyzeUrl() {
   const [details, setDetails] = useState<string | undefined>(undefined);
   // Kept so the Retry action can re-run the last attempt.
   const [lastUrl, setLastUrl] = useState("");
+  // A ref, not `isAnalyzing` — Enter key-repeat can fire twice before React
+  // re-renders, and each spawns its own yt-dlp process (PLAN §12).
+  const inFlight = useRef(false);
 
   async function analyze(url: string) {
+    if (inFlight.current) return;
     const trimmed = url.trim();
     if (!trimmed) {
       setError("Enter a URL to analyze.");
       setDetails(undefined);
       return;
     }
+    inFlight.current = true;
     setLastUrl(trimmed);
     setError(null);
     setDetails(undefined);
@@ -33,6 +38,7 @@ export function useAnalyzeUrl() {
       setError(friendlyError(err, ANALYZE_FALLBACK));
       setDetails(errorDetails(err));
     } finally {
+      inFlight.current = false;
       setIsAnalyzing(false);
     }
   }

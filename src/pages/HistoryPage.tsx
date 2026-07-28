@@ -25,13 +25,40 @@ function iconButton(label: string, Icon: typeof Play, onClick: () => void) {
   );
 }
 
+// Rows the same height as the real ones, so the list doesn't jump when the
+// history arrives from disk (PLAN §55).
+function Skeleton() {
+  return (
+    <div
+      className="overflow-hidden rounded-sm border border-outline-variant"
+      aria-busy="true"
+      aria-label="Loading history"
+    >
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="flex items-center gap-4 border-b border-outline-variant bg-surface-container-low px-4 py-3 last:border-b-0 odd:bg-surface-container-lowest"
+        >
+          <div className="size-4 shrink-0 animate-pulse rounded-full bg-surface-container-high" />
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <div className="h-3.5 w-1/2 animate-pulse rounded bg-surface-container-high" />
+            <div className="h-2.5 w-1/4 animate-pulse rounded bg-surface-container-high" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function HistoryPage() {
-  const { history, open, showInFolder, retry, remove } = useHistory();
+  const { history, isLoading, open, showInFolder, retry, remove } = useHistory();
 
   return (
     <div className="mx-auto max-w-4xl px-8 py-10">
       <PageHeader title="History" description="Previously downloaded media." />
-      {history.length === 0 ? (
+      {isLoading ? (
+        <Skeleton />
+      ) : history.length === 0 ? (
         <EmptyState icon={History} title="No history yet" description="Completed downloads will appear here." />
       ) : (
         <div className="overflow-hidden rounded-sm border border-outline-variant">

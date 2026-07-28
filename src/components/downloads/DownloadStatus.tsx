@@ -4,7 +4,6 @@ import type { DownloadStatus as Status } from "@/types/download";
 // Text + icon + color, never color alone (a11y, DESIGN §50).
 const MAP: Record<Status, { label: string; icon: typeof Check; className: string }> = {
   queued: { label: "Queued", icon: Clock, className: "text-on-surface-variant" },
-  analyzing: { label: "Analyzing", icon: Cog, className: "text-on-surface-variant" },
   downloading: { label: "Downloading", icon: Download, className: "text-primary" },
   processing: { label: "Processing", icon: Cog, className: "text-primary" },
   completed: { label: "Completed", icon: Check, className: "text-primary" },
