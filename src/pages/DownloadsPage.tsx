@@ -6,7 +6,7 @@ import { useDownloads } from "@/hooks/useDownloads";
 import { startQueue } from "@/lib/downloadManager";
 
 export function DownloadsPage() {
-  const { active, queued, finished, open, reveal, cancel } = useDownloads();
+  const { active, queued, finished, open, reveal, cancel, retry } = useDownloads();
   const isEmpty = active.length === 0 && queued.length === 0 && finished.length === 0;
   const canStart = active.length === 0 && queued.length > 0;
 
@@ -38,6 +38,7 @@ export function DownloadsPage() {
           onOpen={open}
           onReveal={reveal}
           onCancel={cancel}
+          onRetry={retry}
         />
       )}
     </div>

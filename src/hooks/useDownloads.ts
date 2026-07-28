@@ -1,5 +1,5 @@
 import { useDownloadStore } from "@/stores/downloadStore";
-import { cancel as cancelDownload } from "@/lib/downloadManager";
+import { cancel as cancelDownload, retry as retryDownload } from "@/lib/downloadManager";
 import { openDownload, revealDownload } from "@/lib/fileActions";
 
 export function useDownloads() {
@@ -18,5 +18,6 @@ export function useDownloads() {
     open: openDownload,
     reveal: revealDownload,
     cancel: cancelDownload,
+    retry: retryDownload,
   } as const;
 }

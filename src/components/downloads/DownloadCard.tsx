@@ -1,11 +1,12 @@
-import { X, FolderOpen, Play } from "lucide-react";
+import { X, FolderOpen, Play, RotateCcw, AlertTriangle } from "lucide-react";
 import type { DownloadCardProps } from "@/types/download";
 import { DownloadStatus } from "./DownloadStatus";
 import { DownloadProgress } from "./DownloadProgress";
 
-export function DownloadCard({ item, onOpen, onReveal, onCancel }: DownloadCardProps) {
+export function DownloadCard({ item, onOpen, onReveal, onCancel, onRetry }: DownloadCardProps) {
   const showProgress = item.status === "downloading" || item.status === "processing";
   const isDone = item.status === "completed";
+  const canRetry = item.status === "failed" || item.status === "cancelled";
 
   return (
     <div className="flex gap-4 rounded-sm border border-outline-variant bg-surface-container-low p-4 transition-colors hover:border-outline">
@@ -31,7 +32,26 @@ export function DownloadCard({ item, onOpen, onReveal, onCancel }: DownloadCardP
 
         {showProgress && <DownloadProgress item={item} />}
 
-        {(showProgress || isDone) && (
+        {item.status === "failed" && item.error && (
+          <div className="flex items-start gap-2 rounded-sm border border-error/40 bg-error/10 p-2.5">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-error" strokeWidth={1.5} />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-on-surface">{item.error}</p>
+              {item.errorDetails && (
+                <details className="mt-1.5">
+                  <summary className="cursor-pointer select-none font-mono text-[11px] text-on-surface-variant hover:text-on-surface">
+                    View details
+                  </summary>
+                  <pre className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-on-surface-variant">
+                    {item.errorDetails}
+                  </pre>
+                </details>
+              )}
+            </div>
+          </div>
+        )}
+
+        {(showProgress || isDone || canRetry) && (
           <div className="mt-1 flex gap-2">
             {isDone && (
               <>
@@ -50,6 +70,15 @@ export function DownloadCard({ item, onOpen, onReveal, onCancel }: DownloadCardP
                   Show in Folder
                 </button>
               </>
+            )}
+            {canRetry && onRetry && (
+              <button
+                onClick={() => onRetry(item.id)}
+                className="inline-flex items-center gap-1.5 rounded bg-primary px-3 py-1.5 text-xs font-medium text-on-primary hover:bg-primary/90 active:scale-[0.98]"
+              >
+                <RotateCcw className="size-3.5" strokeWidth={1.5} />
+                Retry
+              </button>
             )}
             {showProgress && onCancel && (
               <button

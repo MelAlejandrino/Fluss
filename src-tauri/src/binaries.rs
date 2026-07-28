@@ -40,7 +40,16 @@ pub fn bundled_path(app: &AppHandle, name: &str) -> Option<PathBuf> {
 /// Prefers the bundled copy; during development (before binaries are bundled)
 /// falls back to the bare name so the OS resolves it via PATH.
 pub fn resolve(app: &AppHandle, name: &str) -> PathBuf {
-    bundled_path(app, name).unwrap_or_else(|| PathBuf::from(with_exe_suffix(name)))
+    match bundled_path(app, name) {
+        Some(path) => {
+            log::info!("resolved {name}: bundled at {}", path.display());
+            path
+        }
+        None => {
+            log::info!("resolved {name}: not bundled, falling back to PATH");
+            PathBuf::from(with_exe_suffix(name))
+        }
+    }
 }
 
 /// `--js-runtimes deno:<path>` when a bundled deno exists, else empty. yt-dlp

@@ -10,7 +10,7 @@ import { useDownloadForm } from "@/hooks/useDownloadForm";
 import { useStartDownload } from "@/hooks/useStartDownload";
 
 export function HomePage() {
-  const { metadata, isAnalyzing, error, details, analyze } = useAnalyzeUrl();
+  const { metadata, isAnalyzing, error, details, analyze, retry } = useAnalyzeUrl();
   const form = useDownloadForm();
   const { start } = useStartDownload();
   const hasDirectory = !!form.directory;
@@ -44,7 +44,7 @@ export function HomePage() {
         isLoading={isAnalyzing}
       />
 
-      {error && <ErrorState message={error} details={details} />}
+      {error && <ErrorState message={error} details={details} onRetry={retry} />}
       {isAnalyzing && <LoadingState label="Analyzing…" />}
 
       {metadata && !isAnalyzing && (

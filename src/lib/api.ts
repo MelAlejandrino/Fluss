@@ -3,6 +3,11 @@ import { listen } from "@tauri-apps/api/event";
 import { getVersion } from "@tauri-apps/api/app";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from "@tauri-apps/plugin-notification";
 import { RELEASES_API } from "@/lib/appInfo";
 import type { VideoMetadata, DownloadOptions } from "@/types/media";
 import type { DownloadProgressEvent, DownloadHistoryItem } from "@/types/download";
@@ -26,9 +31,6 @@ interface LatestRelease {
 interface DownloadResult {
   filePath: string;
 }
-
-// Distinct signal the Rust side returns when the user cancelled (vs. a failure).
-export const CANCELLED = "__CANCELLED__";
 
 // The single place `invoke`/Tauri APIs are touched. Everything else imports `api`.
 export const api = {
@@ -55,6 +57,14 @@ export const api = {
 
   appVersion() {
     return getVersion();
+  },
+
+  // Real OS notification (PLAN §38). Asks once, then stays quiet if declined —
+  // the in-app toast still fires either way.
+  async notifyDesktop(title: string, body: string) {
+    let granted = await isPermissionGranted();
+    if (!granted) granted = (await requestPermission()) === "granted";
+    if (granted) sendNotification({ title, body });
   },
 
   openUrl(url: string) {

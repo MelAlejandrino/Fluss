@@ -56,8 +56,6 @@ struct ProgressEvent {
 struct Job {
     child: Arc<Mutex<Child>>,
     cancelled: Arc<AtomicBool>,
-    output_directory: String,
-    keep_partial: bool,
 }
 
 /// download_id → running process. Cleared when a download ends.
@@ -66,6 +64,29 @@ pub struct DownloadRegistry(Mutex<HashMap<String, Job>>);
 
 /// Sentinel returned when a download was cancelled by the user (vs. failed).
 pub const CANCELLED: &str = "__CANCELLED__";
+/// Sentinel for an output directory that is gone or not writable. The frontend
+/// turns these into a friendly message (see `src/lib/errors.ts`).
+pub const NO_OUTPUT_DIR: &str = "__NODIR__";
+pub const NO_WRITE_PERMISSION: &str = "__NOWRITE__";
+
+/// The output directory must exist and accept a file before we spawn yt-dlp —
+/// otherwise the failure surfaces as opaque engine stderr minutes later.
+fn check_output_directory(dir: &str) -> Result<(), String> {
+    let path = Path::new(dir);
+    if !path.is_dir() {
+        return Err(NO_OUTPUT_DIR.to_string());
+    }
+    // ponytail: write-and-delete probe. Racy in theory, but it catches the real
+    // cases (read-only volume, no ACL) that a metadata check misses on Windows.
+    let probe = path.join(".fluss-write-test");
+    match fs::write(&probe, b"") {
+        Ok(()) => {
+            let _ = fs::remove_file(&probe);
+            Ok(())
+        }
+        Err(_) => Err(NO_WRITE_PERMISSION.to_string()),
+    }
+}
 
 #[tauri::command]
 pub async fn start_download(
@@ -74,6 +95,8 @@ pub async fn start_download(
     id: String,
     options: DownloadOptions,
 ) -> Result<DownloadResult, String> {
+    check_output_directory(&options.output_directory)?;
+
     let yt_dlp = binaries::resolve(&app, "yt-dlp");
     let ffmpeg = binaries::bundled_path(&app, "ffmpeg");
     let mut args = build_args(&options, ffmpeg.as_deref());
@@ -89,24 +112,27 @@ pub async fn start_download(
     cmd.args(&args).stdout(Stdio::piped()).stderr(Stdio::piped());
     binaries::prepare(&mut cmd);
 
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("Could not start the downloader engine: {e}"))?;
+    let mut child = cmd.spawn().map_err(|e| {
+        log::error!("download {id}: could not spawn yt-dlp: {e}");
+        format!("Could not start the downloader engine: {e}")
+    })?;
+    log::info!(
+        "download {id}: started ({} {}) → {}",
+        options.format,
+        options.quality.as_deref().unwrap_or("best"),
+        options.output_directory
+    );
 
     let stdout = child.stdout.take().expect("piped stdout");
     let stderr = child.stderr.take().expect("piped stderr");
 
     let child = Arc::new(Mutex::new(child));
     let cancelled = Arc::new(AtomicBool::new(false));
-    let output_directory = options.output_directory.clone();
-    let keep_partial = options.keep_partial;
     registry.0.lock().unwrap().insert(
         id.clone(),
         Job {
             child: child.clone(),
             cancelled: cancelled.clone(),
-            output_directory,
-            keep_partial,
         },
     );
 
@@ -124,18 +150,26 @@ pub async fn start_download(
     registry.0.lock().unwrap().remove(&id);
 
     match result {
-        Ok(file_path) => Ok(DownloadResult { file_path }),
+        Ok(file_path) => {
+            log::info!("download {id}: completed");
+            Ok(DownloadResult { file_path })
+        }
         Err(err) if cancelled.load(Ordering::SeqCst) => {
             let _ = err;
+            log::info!("download {id}: cancelled by user");
             Err(CANCELLED.to_string())
         }
-        Err(err) => Err(err),
+        Err(err) => {
+            log::error!("download {id}: failed — {err}");
+            Err(err)
+        }
     }
 }
 
 #[tauri::command]
 pub fn cancel_download(registry: State<'_, DownloadRegistry>, id: String) {
     if let Some(job) = registry.0.lock().unwrap().get(&id) {
+        log::info!("download {id}: cancelling");
         job.cancelled.store(true, Ordering::SeqCst);
         // ponytail: kills yt-dlp; an in-flight ffmpeg merge child may linger
         // briefly. Process-group kill if that ever matters.
@@ -434,6 +468,28 @@ mod tests {
         assert!(!build_args(&opts("mp4"), None).contains(&"--ffmpeg-location".to_string()));
         let with = build_args(&opts("mp4"), Some(Path::new("/bin/ffmpeg")));
         assert!(with.contains(&"--ffmpeg-location".to_string()));
+    }
+
+    #[test]
+    fn missing_output_directory_is_rejected_before_spawn() {
+        let missing = std::env::temp_dir().join("fluss-does-not-exist-xyz");
+        assert_eq!(
+            check_output_directory(&missing.to_string_lossy()),
+            Err(NO_OUTPUT_DIR.to_string())
+        );
+        // A real, writable directory passes.
+        assert_eq!(check_output_directory(&std::env::temp_dir().to_string_lossy()), Ok(()));
+    }
+
+    #[test]
+    fn a_file_is_not_a_valid_output_directory() {
+        let file = std::env::temp_dir().join("fluss-not-a-dir.txt");
+        fs::write(&file, b"x").unwrap();
+        assert_eq!(
+            check_output_directory(&file.to_string_lossy()),
+            Err(NO_OUTPUT_DIR.to_string())
+        );
+        let _ = fs::remove_file(&file);
     }
 
     #[test]

@@ -1,19 +1,27 @@
 import { useState } from "react";
 import type { VideoMetadata } from "@/types/media";
 import { api } from "@/lib/api";
+import { friendlyError, errorDetails } from "@/lib/errors";
+
+const ANALYZE_FALLBACK =
+  "Unable to analyze this URL. It may be private, unavailable, or unsupported.";
 
 export function useAnalyzeUrl() {
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [details, setDetails] = useState<string | undefined>(undefined);
+  // Kept so the Retry action can re-run the last attempt.
+  const [lastUrl, setLastUrl] = useState("");
 
   async function analyze(url: string) {
     const trimmed = url.trim();
     if (!trimmed) {
       setError("Enter a URL to analyze.");
+      setDetails(undefined);
       return;
     }
+    setLastUrl(trimmed);
     setError(null);
     setDetails(undefined);
     setIsAnalyzing(true);
@@ -22,8 +30,8 @@ export function useAnalyzeUrl() {
       setMetadata(await api.analyzeUrl(trimmed));
     } catch (err) {
       // Friendly message for the user; raw engine output tucked into details.
-      setError("Unable to analyze this URL. It may be private, unavailable, or unsupported.");
-      setDetails(typeof err === "string" ? err : String(err));
+      setError(friendlyError(err, ANALYZE_FALLBACK));
+      setDetails(errorDetails(err));
     } finally {
       setIsAnalyzing(false);
     }
@@ -36,5 +44,7 @@ export function useAnalyzeUrl() {
     setIsAnalyzing(false);
   }
 
-  return { metadata, isAnalyzing, error, details, analyze, reset } as const;
+  const retry = lastUrl ? () => analyze(lastUrl) : undefined;
+
+  return { metadata, isAnalyzing, error, details, analyze, retry, reset } as const;
 }

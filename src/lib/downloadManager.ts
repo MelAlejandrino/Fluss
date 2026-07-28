@@ -2,7 +2,8 @@ import { useDownloadStore } from "@/stores/downloadStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useHistoryStore } from "@/stores/historyStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { api, CANCELLED } from "@/lib/api";
+import { api } from "@/lib/api";
+import { CANCELLED, friendlyError, errorDetails } from "@/lib/errors";
 import { notify } from "@/lib/toast";
 import type { DownloadItem } from "@/types/download";
 import type { DownloadFormat, VideoQuality } from "@/types/media";
@@ -96,21 +97,57 @@ function processQueue() {
         completedAt: new Date().toISOString(),
       });
       recordHistory(next, "completed", filePath);
-      if (useSettingsStore.getState().settings.desktopNotifications) {
-        notify(`Downloaded “${next.title ?? next.url}”`, "success");
-      }
+      const label = next.title ?? next.url;
+      notify(`Downloaded “${label}”`, "success");
+      announce("Download complete", `${label}\n${describe(next)}`);
     })
     .catch((err) => {
-      const message = typeof err === "string" ? err : String(err);
-      if (message === CANCELLED) {
+      const raw = typeof err === "string" ? err : String(err);
+      if (raw === CANCELLED) {
         store.update(next.id, { status: "cancelled" });
         recordHistory(next, "cancelled");
-      } else {
-        store.update(next.id, { status: "failed", error: message });
-        recordHistory(next, "failed");
+        return;
       }
+      // Store the friendly reason for the card and the raw text for "View
+      // details" — the UI must never lead with engine stderr (PLAN §26).
+      store.update(next.id, {
+        status: "failed",
+        error: friendlyError(raw),
+        errorDetails: errorDetails(raw),
+      });
+      recordHistory(next, "failed");
+      notify(friendlyError(raw), "error");
+      announce("Download failed", next.title ?? next.url);
     })
     .finally(processQueue);
+}
+
+/// Retry a download that failed or was cancelled: re-queue it as a fresh item.
+export function retry(id: string) {
+  const store = useDownloadStore.getState();
+  const item = store.downloads.find((d) => d.id === id);
+  if (!item) return;
+  store.remove(id);
+  enqueue({
+    url: item.url,
+    title: item.title,
+    thumbnailUrl: item.thumbnailUrl,
+    format: item.format,
+    quality: item.quality ?? "best",
+    outputDirectory: item.outputDirectory,
+  });
+}
+
+function describe(item: DownloadItem) {
+  return item.quality && item.format !== "mp3"
+    ? `${item.quality} ${item.format.toUpperCase()}`
+    : item.format.toUpperCase();
+}
+
+/// OS-level notification, gated on the user's setting.
+function announce(title: string, body: string) {
+  if (!useSettingsStore.getState().settings.desktopNotifications) return;
+  api.notifyDesktop(title, body).catch(() => {}); // best-effort; toast already shown
 }
 
 function recordHistory(

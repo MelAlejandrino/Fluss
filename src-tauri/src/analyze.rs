@@ -35,7 +35,9 @@ pub async fn analyze_url(app: AppHandle, url: String) -> Result<VideoMetadata, S
             .map_err(|e| format!("Could not start the downloader engine: {e}"))?;
 
         if !output.status.success() {
-            return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            log::error!("analyze failed: {stderr}");
+            return Err(stderr);
         }
 
         let json: serde_json::Value = serde_json::from_slice(&output.stdout)
@@ -85,4 +87,60 @@ fn available_qualities(json: &serde_json::Value) -> Vec<u32> {
     heights.dedup();
     heights.reverse();
     heights
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn normalizes_a_full_payload() {
+        let json = json!({
+            "id": "abc123",
+            "title": "A Video",
+            "thumbnail": "https://img/1.jpg",
+            "duration": 752.0,
+            "uploader": "Someone",
+            "webpage_url": "https://site/watch?v=abc123",
+        });
+        let m = normalize(&json, "https://fallback");
+        assert_eq!(m.id, "abc123");
+        assert_eq!(m.title, "A Video");
+        assert_eq!(m.thumbnail_url.as_deref(), Some("https://img/1.jpg"));
+        assert_eq!(m.duration, Some(752.0));
+        assert_eq!(m.uploader.as_deref(), Some("Someone"));
+        assert_eq!(m.webpage_url, "https://site/watch?v=abc123");
+    }
+
+    #[test]
+    fn missing_fields_fall_back_instead_of_panicking() {
+        let m = normalize(&json!({}), "https://fallback");
+        assert_eq!(m.title, "Untitled");
+        assert_eq!(m.webpage_url, "https://fallback");
+        assert_eq!(m.id, "");
+        assert!(m.thumbnail_url.is_none());
+        assert!(m.available_qualities.is_empty());
+    }
+
+    #[test]
+    fn uploader_falls_back_to_channel() {
+        let m = normalize(&json!({ "channel": "The Channel" }), "u");
+        assert_eq!(m.uploader.as_deref(), Some("The Channel"));
+    }
+
+    #[test]
+    fn qualities_are_deduped_video_only_and_descending() {
+        let json = json!({
+            "formats": [
+                { "vcodec": "none", "acodec": "mp4a", "height": 0 },      // audio-only
+                { "vcodec": "avc1", "height": 720 },
+                { "vcodec": "vp9",  "height": 1080 },
+                { "vcodec": "avc1", "height": 720 },                       // duplicate
+                { "acodec": "mp4a" },                                      // no vcodec key
+                { "vcodec": "avc1", "height": 0 },                         // bogus height
+            ]
+        });
+        assert_eq!(available_qualities(&json), vec![1080, 720]);
+    }
 }

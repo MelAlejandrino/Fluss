@@ -12,6 +12,7 @@ interface DownloadQueueProps {
   onOpen: (filePath?: string) => void;
   onReveal?: (filePath?: string) => void;
   onCancel?: (id: string) => void;
+  onRetry?: (id: string) => void;
 }
 
 export function DownloadQueue({
@@ -21,6 +22,7 @@ export function DownloadQueue({
   onOpen,
   onReveal,
   onCancel,
+  onRetry,
 }: DownloadQueueProps) {
   return (
     <div className="flex flex-col gap-8">
@@ -93,7 +95,7 @@ export function DownloadQueue({
           >
             {finished.map((item) => (
               <motion.div key={item.id} variants={staggerItem}>
-                <DownloadCard item={item} onOpen={onOpen} onReveal={onReveal} />
+                <DownloadCard item={item} onOpen={onOpen} onReveal={onReveal} onRetry={onRetry} />
               </motion.div>
             ))}
           </motion.div>

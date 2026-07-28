@@ -24,7 +24,10 @@ export interface DownloadItem {
   speed?: number;
   eta?: number;
   filePath?: string;
+  /** Friendly, user-facing failure reason. */
   error?: string;
+  /** Raw engine output, shown only behind "View details". */
+  errorDetails?: string;
   createdAt: string;
   completedAt?: string;
 }
@@ -57,5 +60,6 @@ export interface DownloadCardProps {
   item: DownloadItem;
   onOpen: (filePath?: string) => void;
   onReveal?: (filePath?: string) => void;
-  onCancel?: (id: string) => void; // MVP 4 — omitted until cancellation lands
+  onCancel?: (id: string) => void;
+  onRetry?: (id: string) => void;
 }
