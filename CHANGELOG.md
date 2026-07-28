@@ -3,6 +3,35 @@
 The release workflow pulls the notes for a tag from the matching `## vX.Y.Z`
 section below. Keep the newest version at the top.
 
+## v0.3.0
+
+Fluss can now update itself, and a few rough edges found by finally testing the
+pages are gone.
+
+**Features**
+- Fluss installs its own updates. "Check for updates" (and the check on launch)
+  now downloads a signed build and restarts into it, instead of sending you to
+  the releases page to fetch an installer by hand. Updating from **0.2.0 to this
+  version is still manual** — 0.2.0 shipped without an updater to do it with;
+  every version after this one updates itself.
+
+**Fixes**
+- Pressing Enter twice in the URL field no longer starts two analyses of the
+  same link. The button greyed itself out, but the field didn't, so a key repeat
+  launched a second one.
+- The History page shows placeholder rows while it reads from disk instead of
+  flashing "No history yet" at you first.
+- The About section and the update check report the real version. Previously
+  anything not installed from a release installer claimed to be 0.1.0 and
+  offered an update it already had.
+
+**Install**
+- Windows: run the `.exe` (or `.msi`) installer (SmartScreen: More info → Run anyway)
+- macOS (Apple Silicon): open the `.dmg`, drag Fluss to Applications. This build
+  is unsigned, so first launch: right-click the app → **Open** (or run
+  `xattr -cr /Applications/Fluss.app` to clear quarantine).
+- Linux: `.AppImage` (make it executable: `chmod +x Fluss*.AppImage`) or `.deb`
+
 ## v0.2.0
 
 Better behaviour when things go wrong, a real right-click menu, and a handful
