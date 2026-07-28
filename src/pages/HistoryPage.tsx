@@ -40,6 +40,8 @@ export function HistoryPage() {
             return (
               <div
                 key={item.id}
+                data-menu="history"
+                data-menu-id={item.id}
                 className="flex items-center gap-4 border-b border-outline-variant bg-surface-container-low px-4 py-3 last:border-b-0 odd:bg-surface-container-lowest"
               >
                 <StatusIcon className={`size-4 shrink-0 ${className}`} strokeWidth={2} />

@@ -9,7 +9,11 @@ export function DownloadCard({ item, onOpen, onReveal, onCancel, onRetry }: Down
   const canRetry = item.status === "failed" || item.status === "cancelled";
 
   return (
-    <div className="flex gap-4 rounded-sm border border-outline-variant bg-surface-container-low p-4 transition-colors hover:border-outline">
+    <div
+      data-menu="download"
+      data-menu-id={item.id}
+      className="flex gap-4 rounded-sm border border-outline-variant bg-surface-container-low p-4 transition-colors hover:border-outline"
+    >
       <div className="aspect-video w-32 shrink-0 overflow-hidden rounded-sm border border-outline-variant bg-surface-container-high">
         {item.thumbnailUrl && (
           <img src={item.thumbnailUrl} alt="" className="size-full object-cover" />

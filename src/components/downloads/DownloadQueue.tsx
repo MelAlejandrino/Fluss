@@ -55,6 +55,8 @@ export function DownloadQueue({
             {queued.map((item) => (
               <div
                 key={item.id}
+                data-menu="download"
+                data-menu-id={item.id}
                 className="flex items-center justify-between gap-3 border-b border-outline-variant px-4 py-3 last:border-b-0"
               >
                 <div className="min-w-0">

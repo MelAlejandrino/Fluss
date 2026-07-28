@@ -8,6 +8,7 @@ import {
   requestPermission,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
+import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { RELEASES_API } from "@/lib/appInfo";
 import type { VideoMetadata, DownloadOptions } from "@/types/media";
 import type { DownloadProgressEvent, DownloadHistoryItem } from "@/types/download";
@@ -57,6 +58,16 @@ export const api = {
 
   appVersion() {
     return getVersion();
+  },
+
+  // Via the plugin, not navigator.clipboard — the web API is unreliable in
+  // WebKitGTK, which is what Tauri uses on Linux.
+  readClipboard() {
+    return readText();
+  },
+
+  writeClipboard(text: string) {
+    return writeText(text);
   },
 
   // Real OS notification (PLAN §38). Asks once, then stays quiet if declined —
