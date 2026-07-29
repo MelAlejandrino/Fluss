@@ -4,6 +4,7 @@ mod download;
 mod files;
 mod history;
 mod settings;
+mod store;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

@@ -1266,13 +1266,12 @@ Enter
 
 Analyze.
 
-Future:
-
 ```text
 Ctrl/Cmd + N
 ```
 
-New download.
+New download. Goes to Home, where the URL field lives. Bare Ctrl/Cmd only —
+`Ctrl+Shift+N` and `Ctrl+Alt+N` belong to the OS and the browser.
 
 ```text
 Escape

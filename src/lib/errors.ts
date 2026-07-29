@@ -10,9 +10,17 @@ export const ANALYZE_FALLBACK =
 export const CANCELLED = "__CANCELLED__";
 export const NO_OUTPUT_DIR = "__NODIR__";
 export const NO_WRITE_PERMISSION = "__NOWRITE__";
+/** Rust gave up waiting on yt-dlp and killed it (analyze has a 90s bound). */
+export const TIMED_OUT = "__TIMEOUT__";
 
 // First match wins, so order matters: specific causes before generic ones.
 const PATTERNS: [RegExp, string][] = [
+  [
+    // Before the generic /timeout/ rule below, which would otherwise claim the
+    // sentinel and blame the user's connection for a stalled engine.
+    /__TIMEOUT__/,
+    "This took too long, so Fluss stopped waiting. The site may be slow or blocking requests — try again.",
+  ],
   [/__NODIR__/, "That download folder no longer exists. Pick another one in Settings."],
   [
     /__NOWRITE__|permission denied|access is denied|\[errno 13\]|read-only file system/i,
@@ -70,6 +78,13 @@ export function errorDetails(raw: unknown): string | undefined {
   const text = typeof raw === "string" ? raw : String(raw);
   const trimmed = text.trim();
   // Sentinels are internal signals, not output worth showing.
-  if (!trimmed || trimmed === NO_OUTPUT_DIR || trimmed === NO_WRITE_PERMISSION) return undefined;
+  if (
+    !trimmed ||
+    trimmed === NO_OUTPUT_DIR ||
+    trimmed === NO_WRITE_PERMISSION ||
+    trimmed === TIMED_OUT
+  ) {
+    return undefined;
+  }
   return trimmed;
 }

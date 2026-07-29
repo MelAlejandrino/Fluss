@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { friendlyError, errorDetails, NO_OUTPUT_DIR, NO_WRITE_PERMISSION } from "./errors";
+import {
+  friendlyError,
+  errorDetails,
+  NO_OUTPUT_DIR,
+  NO_WRITE_PERMISSION,
+  TIMED_OUT,
+  ANALYZE_FALLBACK,
+} from "./errors";
 
 describe("friendlyError", () => {
   it("maps the sentinels the Rust side returns", () => {
@@ -47,5 +54,19 @@ describe("errorDetails", () => {
     expect(errorDetails(NO_OUTPUT_DIR)).toBeUndefined();
     expect(errorDetails(NO_WRITE_PERMISSION)).toBeUndefined();
     expect(errorDetails("   ")).toBeUndefined();
+  });
+});
+
+describe("analysis timeout (PLAN §27)", () => {
+  it("reads as a stall we stopped, not a bad link or a dead connection", () => {
+    const message = friendlyError(TIMED_OUT, ANALYZE_FALLBACK);
+    expect(message).toMatch(/too long/i);
+    // Must not be claimed by the generic /timeout/ rule, which blames the
+    // user's internet for what was actually a stalled engine.
+    expect(message).not.toMatch(/check your internet/i);
+  });
+
+  it("keeps the sentinel out of View details", () => {
+    expect(errorDetails(TIMED_OUT)).toBeUndefined();
   });
 });

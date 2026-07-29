@@ -25,6 +25,7 @@ import { useHistoryStore } from "@/stores/historyStore";
 import { api } from "@/lib/api";
 import { notify } from "@/lib/toast";
 import { cancel, retry, enqueue } from "@/lib/downloadManager";
+import { requestInterrupt } from "@/lib/interrupt";
 import { openDownload, revealDownload } from "@/lib/fileActions";
 import type { DownloadItem, DownloadHistoryItem } from "@/types/download";
 
@@ -234,17 +235,21 @@ export function historyMenu(item: DownloadHistoryItem): MenuEntry[] {
 }
 
 function globalMenu(): MenuEntry[] {
-  const { navigate } = useUiStore.getState();
+  const { navigate, newDownload } = useUiStore.getState();
   return [
     { label: "Paste URL & Analyze", icon: ClipboardPaste, onSelect: pasteAndAnalyze },
     "separator",
-    { label: "New Download", icon: Plus, onSelect: () => navigate("home") },
+    // `newDownload`, not `navigate` — on Home the page doesn't remount, so this
+    // is what clears the URL field and the stale preview.
+    { label: "New Download", icon: Plus, onSelect: newDownload },
     { label: "Home", icon: Home, onSelect: () => navigate("home") },
     { label: "Downloads", icon: Download, onSelect: () => navigate("downloads") },
     { label: "History", icon: History, onSelect: () => navigate("history") },
     { label: "Settings", icon: Settings, onSelect: () => navigate("settings") },
     "separator",
-    { label: "Reload", icon: RefreshCw, onSelect: () => window.location.reload() },
+    // Confirms first if downloads are in flight, then stops them cleanly —
+    // a bare reload would leave yt-dlp running with no UI attached to it.
+    { label: "Reload", icon: RefreshCw, onSelect: () => requestInterrupt("reload") },
   ];
 }
 

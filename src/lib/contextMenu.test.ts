@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { downloadMenu, historyMenu } from "./contextMenu";
-import { clampToViewport } from "@/hooks/useContextMenu";
+import { clampToViewport, elementUnder, MENU_ROOT_ATTR } from "@/hooks/useContextMenu";
 import type { DownloadItem, DownloadHistoryItem, DownloadStatus } from "@/types/download";
 
 const labels = (entries: ReturnType<typeof downloadMenu>) =>
@@ -111,5 +111,46 @@ describe("clampToViewport", () => {
     const { left, top } = clampToViewport(950, 780, 2000, 2000, W, H);
     expect(left).toBe(8);
     expect(top).toBe(8);
+  });
+});
+
+describe("second right-click on the same card (menu already open)", () => {
+  function card() {
+    const el = document.createElement("div");
+    el.setAttribute("data-menu", "download");
+    el.setAttribute("data-menu-id", "d1");
+    return el;
+  }
+
+  function backdrop() {
+    const el = document.createElement("div");
+    el.setAttribute(MENU_ROOT_ATTR, "");
+    return el;
+  }
+
+  it("passes a normal target straight through", () => {
+    const el = card();
+    expect(elementUnder(el, 10, 10, () => [])).toBe(el);
+  });
+
+  it("looks past the open menu's backdrop to the card beneath", () => {
+    // Without this the target is the backdrop, `closest('[data-menu]')` misses,
+    // and the download's menu is replaced by the generic global one.
+    const el = card();
+    const over = backdrop();
+    expect(elementUnder(over, 10, 10, () => [over, el])).toBe(el);
+  });
+
+  it("skips every layer of the menu, not just the first", () => {
+    const el = card();
+    const over = backdrop();
+    const panel = document.createElement("div");
+    over.appendChild(panel); // the menu panel itself, inside the backdrop
+    expect(elementUnder(panel, 10, 10, () => [panel, over, el])).toBe(el);
+  });
+
+  it("yields nothing when only the menu is under the pointer", () => {
+    const over = backdrop();
+    expect(elementUnder(over, 10, 10, () => [over])).toBeNull();
   });
 });

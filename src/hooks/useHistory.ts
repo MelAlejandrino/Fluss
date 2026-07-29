@@ -4,6 +4,16 @@ import { enqueue } from "@/lib/downloadManager";
 import { openDownload, revealDownload } from "@/lib/fileActions";
 import type { DownloadHistoryItem } from "@/types/download";
 
+/// Read the stored history once at app start. Downloads are recorded from the
+/// download manager, not this page — so without this the store would still be
+/// empty when the first one completes, and saving that would wipe the file.
+export function useHistoryInit() {
+  const load = useHistoryStore((s) => s.load);
+  useEffect(() => {
+    load();
+  }, [load]);
+}
+
 export function useHistory() {
   const history = useHistoryStore((s) => s.history);
   const load = useHistoryStore((s) => s.load);

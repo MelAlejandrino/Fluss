@@ -4,21 +4,22 @@ import { TitleBar } from "@/components/app-shell/TitleBar";
 import { ResizeHandles } from "@/components/app-shell/ResizeHandles";
 import { Toaster } from "@/components/common/Toaster";
 import { ContextMenu } from "@/components/common/ContextMenu";
-import { ConfirmQuitDialog } from "@/components/common/ConfirmQuitDialog";
+import { ActiveDownloadsDialog } from "@/components/common/ActiveDownloadsDialog";
 import { HomePage } from "@/pages/HomePage";
 import { DownloadsPage } from "@/pages/DownloadsPage";
 import { HistoryPage } from "@/pages/HistoryPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { useUiStore } from "@/stores/uiStore";
-import { useDownloadStore } from "@/stores/downloadStore";
 import { useDownloadEvents } from "@/hooks/useDownloadEvents";
 import { useSettingsInit } from "@/hooks/useSettings";
+import { useHistoryInit } from "@/hooks/useHistory";
 import { useTheme } from "@/hooks/useTheme";
 import { useUpdateCheck } from "@/hooks/useUpdate";
 import { useContextMenu } from "@/hooks/useContextMenu";
-import { api } from "@/lib/api";
+import { useNewDownloadShortcut } from "@/hooks/useNewDownloadShortcut";
+import { useReloadShortcut } from "@/hooks/useReloadShortcut";
+import { requestInterrupt, performInterrupt } from "@/lib/interrupt";
 import { pageTransition } from "@/lib/motion";
-import { useCallback, useEffect, useState } from "react";
 
 const PAGES = {
   home: HomePage,
@@ -31,54 +32,19 @@ function App() {
   const page = useUiStore((s) => s.page);
   const Page = PAGES[page];
   useSettingsInit();
+  useHistoryInit();
   useTheme();
   useUpdateCheck();
   useDownloadEvents();
   useContextMenu();
-  const [quitDialogOpen, setQuitDialogOpen] = useState(false);
-
-  const handleClose = useCallback(() => {
-    const downloads = useDownloadStore.getState().downloads;
-    const hasActive = downloads.some(
-      (d) => d.status === "downloading" || d.status === "processing",
-    );
-    if (hasActive) {
-      setQuitDialogOpen(true);
-      return;
-    }
-    api.windowClose();
-  }, []);
-
-  const handleQuit = useCallback(() => {
-    api.forceCancelAll();
-    setQuitDialogOpen(false);
-    api.windowClose();
-  }, []);
-
-  const handleDismissQuit = useCallback(() => {
-    setQuitDialogOpen(false);
-  }, []);
-
-  useEffect(() => {
-    function onBeforeUnload(e: BeforeUnloadEvent) {
-      const downloads = useDownloadStore.getState().downloads;
-      const hasActive = downloads.some(
-        (d) => d.status === "downloading" || d.status === "processing",
-      );
-      if (hasActive) {
-        e.preventDefault();
-        e.returnValue = "";
-      }
-    }
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => {
-      window.removeEventListener("beforeunload", onBeforeUnload);
-    };
-  }, []);
+  useNewDownloadShortcut();
+  useReloadShortcut();
+  const pendingInterrupt = useUiStore((s) => s.pendingInterrupt);
+  const setPendingInterrupt = useUiStore((s) => s.setPendingInterrupt);
 
   return (
     <div className="flex h-screen flex-col">
-      <TitleBar onClose={handleClose} />
+      <TitleBar onClose={() => requestInterrupt("quit")} />
       <div className="min-h-0 flex-1">
         <AppShell>
           <AnimatePresence mode="wait">
@@ -98,10 +64,11 @@ function App() {
       <Toaster />
       <ContextMenu />
       <ResizeHandles />
-      {quitDialogOpen && (
-        <ConfirmQuitDialog
-          onClose={handleDismissQuit}
-          onQuit={handleQuit}
+      {pendingInterrupt && (
+        <ActiveDownloadsDialog
+          action={pendingInterrupt}
+          onClose={() => setPendingInterrupt(null)}
+          onConfirm={() => performInterrupt(pendingInterrupt)}
         />
       )}
     </div>

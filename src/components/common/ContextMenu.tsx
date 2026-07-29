@@ -1,5 +1,5 @@
 import { useContextMenuStore, type MenuItem } from "@/stores/contextMenuStore";
-import { useMenuPlacement } from "@/hooks/useContextMenu";
+import { useMenuPlacement, MENU_ROOT_ATTR } from "@/hooks/useContextMenu";
 
 function Item({ item, onDone }: { item: MenuItem; onDone: () => void }) {
   const { label, icon: Icon, disabled, danger } = item;
@@ -34,8 +34,11 @@ export function ContextMenu() {
   if (!open) return null;
 
   return (
-    // Transparent backdrop closes on any click, including a second right-click.
-    <div className="fixed inset-0 z-[60]" onClick={hide} onContextMenu={hide}>
+    // Transparent backdrop; a left-click anywhere closes the menu. It does NOT
+    // handle right-click — the window listener sees through it (via
+    // MENU_ROOT_ATTR) and reopens with the entries for whatever is underneath,
+    // so a second right-click on a card keeps that card's menu.
+    <div {...{ [MENU_ROOT_ATTR]: "" }} className="fixed inset-0 z-[60]" onClick={hide}>
       <div
         ref={ref}
         role="menu"

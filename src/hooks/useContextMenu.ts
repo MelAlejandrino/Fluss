@@ -2,6 +2,33 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useContextMenuStore } from "@/stores/contextMenuStore";
 import { buildMenu } from "@/lib/contextMenu";
 
+/** Marks the open menu's backdrop so right-clicks can see past it. */
+export const MENU_ROOT_ATTR = "data-context-menu-root";
+
+/**
+ * The element a right-click really landed on.
+ *
+ * While a menu is open its backdrop covers the viewport, so a second
+ * right-click reports the backdrop as the target — and the card underneath
+ * loses its own menu to the generic one. When that happens, look through the
+ * overlay to the first element behind it.
+ *
+ * `probe` is injectable because jsdom has no layout and so no working
+ * `elementsFromPoint`.
+ */
+export function elementUnder(
+  target: HTMLElement | null,
+  x: number,
+  y: number,
+  probe: (x: number, y: number) => Element[] = (px, py) => document.elementsFromPoint(px, py),
+): HTMLElement | null {
+  if (!target?.closest(`[${MENU_ROOT_ATTR}]`)) return target;
+  const behind = probe(x, y).find(
+    (el): el is HTMLElement => el instanceof HTMLElement && !el.closest(`[${MENU_ROOT_ATTR}]`),
+  );
+  return behind ?? null;
+}
+
 /**
  * Replaces the webview's native context menu app-wide. Mounted once, at the
  * app root.
@@ -17,7 +44,7 @@ export function useContextMenu() {
     function onContextMenu(e: MouseEvent) {
       if (import.meta.env.DEV && e.shiftKey) return;
       e.preventDefault();
-      const target = e.target as HTMLElement | null;
+      const target = elementUnder(e.target as HTMLElement | null, e.clientX, e.clientY);
       if (!target) return;
       const entries = buildMenu(target);
       if (entries.length) show(e.clientX, e.clientY, entries);

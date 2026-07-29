@@ -8,6 +8,9 @@ describe("formatBytes", () => {
   });
   it("scales units", () => {
     expect(formatBytes(512)).toBe("512 B");
+    // A sub-1 reading must not index past the start of the unit table.
+    expect(formatBytes(0.5)).toBe("1 B");
+    expect(formatSpeed(0.5)).not.toContain("undefined");
     expect(formatBytes(1024)).toBe("1.0 KB");
     expect(formatBytes(1_500_000)).toBe("1.4 MB");
     expect(formatBytes(312_000_000)).toBe("297.5 MB");

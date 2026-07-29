@@ -2,7 +2,10 @@ export function formatBytes(bytes?: number): string {
   if (bytes === undefined || bytes < 0) return "—";
   if (bytes === 0) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  // Clamp low as well as high: a sub-1 value (a trickling B/s reading) gives a
+  // negative index, and `units[-1]` renders as "undefined".
+  const exponent = Math.floor(Math.log(bytes) / Math.log(1024));
+  const i = Math.min(Math.max(exponent, 0), units.length - 1);
   const value = bytes / Math.pow(1024, i);
   return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }

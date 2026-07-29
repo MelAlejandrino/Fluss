@@ -6,7 +6,7 @@ use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::binaries;
@@ -219,34 +219,29 @@ pub fn force_cancel_all(registry: State<'_, DownloadRegistry>) {
     }
 }
 
-/// Removes incomplete media files in the output directory that are likely
-/// leftover partial downloads. Targets files that look like active partial
-/// artifacts (created in the last 24 hours or with no matching completed file).
+/// True only for yt-dlp's own intermediates: the in-progress `.part`, its
+/// numbered `.part-FragN` pieces, and the `.ytdl` resume record.
+///
+/// Deliberately narrow. The output directory is the user's own folder — very
+/// often their Videos folder — so anything that could plausibly be a file they
+/// made or downloaded elsewhere is off limits (PLAN §24: never delete user
+/// files unless they are *known* partial artifacts).
+fn is_partial_artifact(path: &Path) -> bool {
+    let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+        return false;
+    };
+    let ext = ext.to_ascii_lowercase();
+    ext == "part" || ext == "ytdl" || ext.starts_with("part-frag")
+}
+
+/// Clears the failed attempt's leftovers when "Keep partial files" is off.
 fn cleanup_partial_files(output_directory: &str) {
-    let dir = Path::new(output_directory);
-    let Ok(entries) = fs::read_dir(dir) else {
+    let Ok(entries) = fs::read_dir(Path::new(output_directory)) else {
         return;
     };
-    let now = SystemTime::now();
     for entry in entries.flatten() {
         let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-        if !matches!(ext.as_str(), "mp4" | "mp3" | "mkv" | "webm" | "m4a" | "flv" | "avi" | "mov" | "wmv" | "part" | "tmp" | "downloading") {
-            continue;
-        }
-        let metadata = match entry.metadata() {
-            Ok(m) => m,
-            Err(_) => continue,
-        };
-        let modified = match metadata.modified() {
-            Ok(t) => t,
-            Err(_) => continue,
-        };
-        let elapsed = now.duration_since(modified).unwrap_or_default();
-        if elapsed < Duration::from_secs(86400) {
+        if path.is_file() && is_partial_artifact(&path) {
             let _ = fs::remove_file(&path);
         }
     }
@@ -553,6 +548,35 @@ mod tests {
             Err(NO_OUTPUT_DIR.to_string())
         );
         let _ = fs::remove_file(&file);
+    }
+
+    #[test]
+    fn cleanup_removes_only_yt_dlp_intermediates() {
+        let dir = std::env::temp_dir().join("fluss-cleanup-test");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        // The user's own media, in their own download folder. A failed download
+        // must never touch these (PLAN §24).
+        let keep = ["Holiday.mp4", "Album.mp3", "Clip.mkv", "Recording.mov", "notes.txt"];
+        for f in keep {
+            fs::write(dir.join(f), b"x").unwrap();
+        }
+        // yt-dlp's own leftovers from the failed attempt.
+        let sweep = ["Video.mp4.part", "Video.mp4.part-Frag0", "Video.ytdl"];
+        for f in sweep {
+            fs::write(dir.join(f), b"x").unwrap();
+        }
+
+        cleanup_partial_files(&dir.to_string_lossy());
+
+        for f in keep {
+            assert!(dir.join(f).exists(), "{f} is the user's file — must survive");
+        }
+        for f in sweep {
+            assert!(!dir.join(f).exists(), "{f} is an artifact — should be cleaned up");
+        }
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -52,6 +52,11 @@ jobs:
           node -e "const f='package.json',j=require('./'+f);j.version='$VER';require('fs').writeFileSync(f,JSON.stringify(j,null,2)+'\n')"
           node -e "const f='src-tauri/tauri.conf.json',j=require('./'+f);j.version='$VER';require('fs').writeFileSync(f,JSON.stringify(j,null,2)+'\n')"
 
+      # ci.yml only gates branch pushes and PRs, so without this a tag builds
+      # and ships whatever it points at — including a commit that never saw CI.
+      - name: Frontend tests
+        run: npm test
+
       - name: Fetch bundled engines
         shell: bash
         run: bash scripts/fetch-binaries.sh ${{ matrix.engines }}
@@ -87,6 +92,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      # After the build, not before: `generate_context!` embeds dist/, which
+      # tauri-action is what produces here. Still ahead of the upload, so a
+      # failure can't put artifacts on a draft release.
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
 
       # Prove the app actually launches on Linux (catches missing webkit libs,
       # crash-on-start). Runs the built binary headlessly and checks it stays up.

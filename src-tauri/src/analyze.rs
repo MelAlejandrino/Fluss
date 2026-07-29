@@ -1,8 +1,19 @@
 use serde::Serialize;
-use std::process::Command;
+use std::io::Read;
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::time::{Duration, Instant};
 use tauri::AppHandle;
 
 use crate::binaries;
+
+/// Analysis is a metadata fetch — a couple of seconds normally. Without a bound
+/// a stalled yt-dlp leaves the UI on "Analyzing…" with no way out but killing
+/// the app, since the frontend blocks a second attempt while one is in flight.
+const ANALYZE_TIMEOUT: Duration = Duration::from_secs(90);
+
+/// Sentinel for "we gave up waiting" — `src/lib/errors.ts` turns it into a
+/// message that says to try again, rather than blaming the media.
+pub const TIMED_OUT: &str = "__TIMEOUT__";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,25 +39,66 @@ pub async fn analyze_url(app: AppHandle, url: String) -> Result<VideoMetadata, S
         cmd.args(["--dump-single-json", "--no-playlist"]);
         cmd.args(&js_runtime);
         cmd.arg(&url);
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
         binaries::prepare(&mut cmd);
 
-        let output = cmd
-            .output()
+        let mut child = cmd
+            .spawn()
             .map_err(|e| format!("Could not start the downloader engine: {e}"))?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        // Drain both pipes on their own threads. A JSON dump easily exceeds the
+        // pipe buffer, and a full buffer would block yt-dlp forever — which the
+        // timeout below would then report as a stall we caused ourselves.
+        let mut out = child.stdout.take().expect("piped stdout");
+        let mut err = child.stderr.take().expect("piped stderr");
+        let out_thread = std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = out.read_to_end(&mut buf);
+            buf
+        });
+        let err_thread = std::thread::spawn(move || {
+            let mut buf = String::new();
+            let _ = err.read_to_string(&mut buf);
+            buf
+        });
+
+        let status = wait_with_timeout(&mut child, ANALYZE_TIMEOUT).inspect_err(|_| {
+            log::error!("analyze timed out after {}s", ANALYZE_TIMEOUT.as_secs());
+        })?;
+        let stdout = out_thread.join().unwrap_or_default();
+        let stderr = err_thread.join().unwrap_or_default();
+
+        if !status.success() {
+            let stderr = stderr.trim().to_string();
             log::error!("analyze failed: {stderr}");
             return Err(stderr);
         }
 
-        let json: serde_json::Value = serde_json::from_slice(&output.stdout)
+        let json: serde_json::Value = serde_json::from_slice(&stdout)
             .map_err(|e| format!("Could not read media details: {e}"))?;
 
         Ok(normalize(&json, &url))
     })
     .await
     .map_err(|e| format!("Analysis task failed: {e}"))?
+}
+
+/// Waits for `child`, killing it and returning [`TIMED_OUT`] once `limit`
+/// elapses. `std::process` has no timed wait, so this polls — the interval only
+/// bounds how late we notice an exit, not how long analysis takes.
+fn wait_with_timeout(child: &mut Child, limit: Duration) -> Result<ExitStatus, String> {
+    let deadline = Instant::now() + limit;
+    loop {
+        match child.try_wait().map_err(|e| e.to_string())? {
+            Some(status) => return Ok(status),
+            None if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait(); // reap it, so the pipes close
+                return Err(TIMED_OUT.to_string());
+            }
+            None => std::thread::sleep(Duration::from_millis(50)),
+        }
+    }
 }
 
 
@@ -93,6 +145,50 @@ fn available_qualities(json: &serde_json::Value) -> Vec<u32> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// A process that outlives any timeout we'd set in a test.
+    fn slow_command() -> Command {
+        let mut cmd = if cfg!(target_os = "windows") {
+            let mut c = Command::new("cmd");
+            c.args(["/C", "ping -n 30 127.0.0.1"]);
+            c
+        } else {
+            let mut c = Command::new("sleep");
+            c.arg("30");
+            c
+        };
+        cmd.stdout(Stdio::null()).stderr(Stdio::null());
+        cmd
+    }
+
+    #[test]
+    fn a_stalled_analysis_is_killed_not_waited_on_forever() {
+        let mut child = slow_command().spawn().expect("spawn");
+        let started = Instant::now();
+        let result = wait_with_timeout(&mut child, Duration::from_millis(300));
+
+        assert_eq!(result, Err(TIMED_OUT.to_string()));
+        // Returned on the timeout, not after the process's own 30s.
+        assert!(started.elapsed() < Duration::from_secs(5));
+        // And it was actually killed — a second wait resolves immediately
+        // rather than hanging, because the child is already reaped.
+        assert!(child.try_wait().is_ok());
+    }
+
+    #[test]
+    fn a_prompt_exit_returns_its_status() {
+        let mut cmd = if cfg!(target_os = "windows") {
+            let mut c = Command::new("cmd");
+            c.args(["/C", "exit 0"]);
+            c
+        } else {
+            Command::new("true")
+        };
+        cmd.stdout(Stdio::null()).stderr(Stdio::null());
+        let mut child = cmd.spawn().expect("spawn");
+        let status = wait_with_timeout(&mut child, Duration::from_secs(10)).expect("exited");
+        assert!(status.success());
+    }
 
     #[test]
     fn normalizes_a_full_payload() {

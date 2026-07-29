@@ -10,6 +10,7 @@ const NAV: { page: Page; label: string; icon: typeof Home }[] = [
 export function Sidebar() {
   const page = useUiStore((s) => s.page);
   const navigate = useUiStore((s) => s.navigate);
+  const newDownload = useUiStore((s) => s.newDownload);
 
   // Below `lg` the sidebar collapses to an icon rail (PLAN §36) — labels are
   // hidden but stay in the DOM as accessible names via title/aria-label.
@@ -28,8 +29,8 @@ export function Sidebar() {
       </div>
 
       <button
-        onClick={() => navigate("home")}
-        title="New Download"
+        onClick={newDownload}
+        title="New Download (Ctrl+N)"
         aria-label="New Download"
         className="mx-2 mb-4 flex items-center gap-2 rounded border border-outline-variant bg-surface-container-lowest py-2 text-sm text-on-surface transition-colors hover:bg-surface-container max-lg:justify-center max-lg:px-0 lg:mx-3 lg:px-3"
       >

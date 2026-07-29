@@ -7,7 +7,7 @@ interface UrlInputProps {
 }
 
 export function UrlInput({ onSubmit, isLoading }: UrlInputProps) {
-  const { url, setUrl, submit } = useUrlInput(onSubmit);
+  const { url, setUrl, submit, inputRef } = useUrlInput(onSubmit);
 
   return (
     <form
@@ -18,6 +18,7 @@ export function UrlInput({ onSubmit, isLoading }: UrlInputProps) {
       className="flex w-full gap-2"
     >
       <input
+        ref={inputRef}
         type="text"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
