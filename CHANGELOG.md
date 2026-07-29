@@ -3,6 +3,47 @@
 The release workflow pulls the notes for a tag from the matching `## vX.Y.Z`
 section below. Keep the newest version at the top.
 
+## v0.5.0
+
+**Fixes**
+- **A failed download could delete your media.** When "Keep partial files" was
+  off, a failed download swept the output directory and removed every video and
+  audio file modified in the last 24 hours — and the default output directory is
+  your Videos folder. Cleanup is now limited to yt-dlp's own `.part`,
+  `.part-FragN`, and `.ytdl` intermediates. **Please update.**
+- **Download history could be wiped.** If a download finished before the History
+  page had ever been opened, Fluss saved its empty in-memory list over the real
+  file. History is now read at startup, is never saved before it has been read,
+  and keeps anything recorded while that read is in flight.
+- Settings and history are written atomically, so a crash or power loss during a
+  save can no longer leave a half-written file behind.
+- A file that exists but can't be read is no longer silently replaced — Fluss
+  reports it and offers "Start fresh" rather than overwriting what's there.
+- Failed saves are reported instead of failing silently. Previously a change
+  could look applied and then be gone on restart.
+- Analysis now gives up after 90 seconds instead of leaving the app on
+  "Analyzing…" forever with no way out but restarting.
+- Reloading with downloads in progress used the browser's own prompt, which
+  looked out of place. It now uses Fluss's dialog and stops the downloader
+  cleanly instead of leaving it running unattached.
+- A second right-click on a download or history entry showed the generic menu
+  instead of that item's own.
+- Very slow transfer speeds displayed "undefined".
+
+**Features**
+- **Ctrl/Cmd + N** starts a new download from anywhere — clears the URL field,
+  the previous preview, and the bulk list, and puts the cursor back in the box.
+
+**Internal**
+- The release build now runs the full test suite before producing installers.
+
+**Install**
+- Windows: run the `.exe` (or `.msi`) installer (SmartScreen: More info → Run anyway)
+- macOS (Apple Silicon): open the `.dmg`, drag Fluss to Applications. This build
+  is unsigned, so first launch: right-click the app → **Open** (or run
+  `xattr -cr /Applications/Fluss.app` to clear quarantine).
+- Linux: `.AppImage` (chmod +x, run) or `.deb`.
+
 ## v0.4.0
 
 **Features**
