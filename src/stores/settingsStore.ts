@@ -10,6 +10,7 @@ const DEFAULTS: Settings = {
   concurrentDownloads: 1,
   overwriteExisting: false,
   keepPartialFiles: false,
+  useBrowserCookies: false,
   theme: "system",
 };
 

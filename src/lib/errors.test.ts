@@ -25,6 +25,18 @@ describe("friendlyError", () => {
       ["ERROR: You have requested merging of multiple formats but ffmpeg is not installed", /FFmpeg/],
       ["ERROR: Unsupported URL: https://example.com/page", /isn't supported/],
       ["ERROR: [youtube] xyz: Requested format is not available", /quality isn't available/],
+      ["WARNING: Unable to download webpage: HTTP Error 429: Too Many Requests", /blocking Fluss/],
+      // The bot wall is what a 429 turns into after yt-dlp retries — it must not
+      // read as "private or removed", which is what the user would act on wrongly.
+      ["ERROR: [youtube] xyz: Sign in to confirm you're not a bot. Use --cookies", /blocking Fluss/],
+      // Nearly identical wording, different cause — the age gate must keep its
+      // own message instead of being swallowed by the bot-wall rule.
+      ["ERROR: [youtube] xyz: Sign in to confirm your age", /age-restricted/],
+      // Every cookie-read failure — locked file, undecryptable store, browser
+      // missing — lands on one message. The user's move is the same each time.
+      ["ERROR: Failed to decrypt with DPAPI. See https://github.com/...", /browser sign-in/],
+      ["ERROR: Could not copy Chrome cookie database. See https://...", /browser sign-in/],
+      ["ERROR: could not find firefox cookies database in None", /browser sign-in/],
     ];
     for (const [raw, expected] of cases) {
       expect(friendlyError(raw), raw).toMatch(expected);

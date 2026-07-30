@@ -35,7 +35,24 @@ const PATTERNS: [RegExp, string][] = [
     "The media processor (FFmpeg) is missing, so the video and audio can't be combined.",
   ],
   [
-    /private video|sign in to confirm|members[- ]only|login required|this video is unavailable|video unavailable|has been removed|account associated with this video has been terminated/i,
+    // Every way reading the browser session can fail — locked file, undecryptable
+    // store, browser not installed. The causes differ but the user's move is the
+    // same: sign in with Firefox, or turn the setting back off. Naming DPAPI or a
+    // browser they never chose helps nobody.
+    /cookie database|failed to decrypt with dpapi|could not (decrypt|find).*cookie/i,
+    "Fluss couldn't read your browser sign-in. Make sure you're signed in to the site in Firefox, or turn off \"Use my browser sign-in\" in Settings.",
+  ],
+  [
+    // Before the unavailable rule below, which used to claim "sign in to
+    // confirm" and blame the video for what is really a throttled network.
+    // The 429 comes first; the bot wall is the fallout once yt-dlp retries.
+    // "not a bot" only — "sign in to confirm you" would also swallow the
+    // age-gate's "sign in to confirm your age", which is a different fix.
+    /http error 429|too many requests|rate[- ]?limit|not a bot/i,
+    "This site is blocking Fluss right now. Wait a few minutes, or turn on \"Use my browser sign-in\" in Settings.",
+  ],
+  [
+    /private video|members[- ]only|login required|this video is unavailable|video unavailable|has been removed|account associated with this video has been terminated/i,
     "This media is unavailable — it may be private, removed, or restricted.",
   ],
   [

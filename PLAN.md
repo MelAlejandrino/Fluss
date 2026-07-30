@@ -1065,12 +1065,20 @@ Theme
 ## Engine
 
 ```text
+Use my browser sign-in            [ toggle ]
+
 yt-dlp
 Version: x.x.x
 
 FFmpeg
 Version: x.x.x
 ```
+
+"Use my browser sign-in" passes `--cookies-from-browser` so a site treats the
+request as a signed-in user instead of a bot. Off by default — reading the user's
+cookie store is opt-in. Which browser is decided in Rust, not exposed: on Windows
+only Firefox can work, because Chromium binds its cookie key to the browser
+binary. The user never picks a browser or sees the reason.
 
 Keep Settings minimal in MVP.
 

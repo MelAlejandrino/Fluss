@@ -32,12 +32,17 @@ pub struct VideoMetadata {
 pub async fn analyze_url(app: AppHandle, url: String) -> Result<VideoMetadata, String> {
     let yt_dlp = binaries::resolve(&app, "yt-dlp");
     let js_runtime = binaries::js_runtime_args(&app);
+    // Analysis hits the same bot wall as the download, so it needs the same
+    // session cookies — otherwise a URL that downloads fine can't be previewed.
+    let cookies = crate::settings::cookie_args(&app);
 
     // Off the UI/runtime thread — yt-dlp metadata fetch takes ~1-2s.
     tauri::async_runtime::spawn_blocking(move || {
         let mut cmd = Command::new(&yt_dlp);
         cmd.args(["--dump-single-json", "--no-playlist"]);
+        cmd.args(binaries::solver_args());
         cmd.args(&js_runtime);
+        cmd.args(&cookies);
         cmd.arg(&url);
         cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
         binaries::prepare(&mut cmd);

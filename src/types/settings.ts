@@ -7,6 +7,10 @@ export interface Settings {
   concurrentDownloads: number;
   overwriteExisting: boolean;
   keepPartialFiles: boolean;
+  /// Lets yt-dlp borrow the browser session so sites don't treat Fluss as a bot.
+  /// Which browser is decided in src-tauri/src/settings.rs, not here — it's
+  /// OS-dependent and not something a user should have to reason about.
+  useBrowserCookies: boolean;
   theme: Theme;
 }
 

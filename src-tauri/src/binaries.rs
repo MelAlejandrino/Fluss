@@ -52,6 +52,21 @@ pub fn resolve(app: &AppHandle, name: &str) -> PathBuf {
     }
 }
 
+/// Lets yt-dlp fetch its EJS challenge-solver script (from the yt-dlp project's
+/// own GitHub releases, cached after the first run).
+///
+/// A JS runtime alone is not enough: without the solver script, signature and
+/// `n` challenge solving fail, most formats get dropped, and YouTube answers the
+/// rest with "Sign in to confirm you're not a bot". Verified — the same blocked
+/// video extracts fine with this and fails without it.
+///
+/// ponytail: fetched at runtime, not bundled. Build-time bundling would remove
+/// the network dependency and the trust-on-first-use; do that if we ever ship
+/// offline-capable builds.
+pub fn solver_args() -> [String; 2] {
+    ["--remote-components".to_string(), "ejs:github".to_string()]
+}
+
 /// `--js-runtimes deno:<path>` when a bundled deno exists, else empty. yt-dlp
 /// needs a JS runtime for full YouTube extraction; in dev it finds deno on PATH
 /// on its own, so we only point it at the bundled copy.
@@ -91,6 +106,13 @@ mod tests {
         let expected = if cfg!(target_os = "windows") { "yt-dlp.exe" } else { "yt-dlp" };
         assert_eq!(with_exe_suffix("yt-dlp"), expected);
         assert!(!with_exe_suffix("ffmpeg").is_empty());
+    }
+
+    #[test]
+    fn the_challenge_solver_is_always_requested() {
+        // Not optional and not a setting: without it yt-dlp silently loses most
+        // formats and YouTube answers with a bot wall.
+        assert_eq!(solver_args(), ["--remote-components", "ejs:github"]);
     }
 
     #[test]

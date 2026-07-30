@@ -105,6 +105,16 @@ export function SettingsPage() {
       </Section>
 
       <Section title="Engine">
+        <Row
+          label="Use my browser sign-in"
+          hint="Turn this on if a site says it can't verify you. Fluss uses the browser you're already signed in with."
+        >
+          <Toggle
+            label="Use my browser sign-in"
+            checked={settings.useBrowserCookies}
+            onChange={(v) => update("useBrowserCookies", v)}
+          />
+        </Row>
         <Row label="yt-dlp">
           <span className="font-mono text-xs text-on-surface-variant">{engine.ytDlp}</span>
         </Row>

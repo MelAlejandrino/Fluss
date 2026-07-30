@@ -124,11 +124,13 @@ pub async fn start_download(
     let yt_dlp = binaries::resolve(&app, "yt-dlp");
     let ffmpeg = binaries::bundled_path(&app, "ffmpeg");
     let mut args = build_args(&options, ffmpeg.as_deref());
-    // Insert the JS-runtime flag before the trailing URL.
-    let js_runtime = binaries::js_runtime_args(&app);
-    if !js_runtime.is_empty() {
+    // Insert the JS-runtime and cookie flags before the trailing URL.
+    let mut extra = binaries::js_runtime_args(&app);
+    extra.extend(binaries::solver_args());
+    extra.extend(crate::settings::cookie_args(&app));
+    if !extra.is_empty() {
         let url = args.pop().expect("url is the last arg");
-        args.extend(js_runtime);
+        args.extend(extra);
         args.push(url);
     }
 
@@ -380,6 +382,13 @@ fn build_args(options: &DownloadOptions, ffmpeg: Option<&Path>) -> Vec<String> {
         "utf-8".into(),
         "--no-playlist".into(),
         "--no-simulate".into(),
+        // Title/artist/date into the container, cover art into the file, so
+        // players and file managers show something useful. Both formats we emit
+        // (mp4, mp3) support this; ffmpeg does the work.
+        "--embed-metadata".into(),
+        // ponytail: always on, no setting. Add a toggle if someone actually
+        // wants bare files.
+        "--embed-thumbnail".into(),
         "--newline".into(),
         // Force progress output even though our stdio is piped (non-TTY),
         // otherwise yt-dlp stays silent and no events fire.
@@ -457,6 +466,15 @@ mod tests {
         assert!(args
             .iter()
             .any(|a| a.contains("before_dl:__FLUSSMETA__%(thumbnail)s %(title)s")));
+    }
+
+    #[test]
+    fn both_formats_embed_metadata_and_cover_art() {
+        for format in ["mp4", "mp3"] {
+            let args = build_args(&opts(format), None);
+            assert!(args.contains(&"--embed-metadata".to_string()), "{format}");
+            assert!(args.contains(&"--embed-thumbnail".to_string()), "{format}");
+        }
     }
 
     #[test]
