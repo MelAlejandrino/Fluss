@@ -3,6 +3,27 @@
 The release workflow pulls the notes for a tag from the matching `## vX.Y.Z`
 section below. Keep the newest version at the top.
 
+## v0.7.0
+
+**Fixes**
+- **Cancelled downloads left a stray image behind.** Embedding cover art (new in
+  v0.6.0) writes the thumbnail as a file first, so cancelling a download — an MP3
+  especially — left a leftover `.webp` or `.png` in your folder. Fluss now keeps
+  every working file out of your download folder entirely, so only the finished
+  file ever appears there.
+- **Leftover `.part` files were never cleaned up after a successful retry.** If
+  you cancelled a download and downloaded it again, the abandoned partial stayed
+  in your folder for good. Finishing a download now clears its own leftovers.
+  Other downloads' files are left alone, including ones still in progress.
+- "Keep partial files" now keeps only genuinely unfinished downloads, not
+  scaffolding from a download that completed.
+
+**Features**
+- New **Update engine** button in Settings → Engine. Sites change how they serve
+  media and a newer engine is usually the fix, so this is the first thing to try
+  if downloads stop working — no reinstall needed. It reports honestly when the
+  engine was installed by a package manager and can't update itself.
+
 ## v0.6.0
 
 **Fixes**
