@@ -3,6 +3,26 @@
 The release workflow pulls the notes for a tag from the matching `## vX.Y.Z`
 section below. Keep the newest version at the top.
 
+## v0.6.0
+
+**Fixes**
+- **YouTube downloads failing with "Sign in to confirm you're not a bot" or
+  missing quality options.** Fluss was not fetching the challenge-solver script
+  yt-dlp needs to decipher YouTube's signatures. Without it, most formats were
+  silently dropped and many videos wouldn't download at all. Fluss now requests
+  it automatically — nothing to configure.
+- Errors caused by a site rate-limiting Fluss now say so, and say to wait,
+  instead of claiming the video was private or removed.
+
+**Features**
+- Downloaded files now carry their title, uploader, date and cover art, so they
+  look right in your player and file manager. Chapters are included for videos
+  that have them.
+- New **Use my browser sign-in** setting (Settings → Engine) for the rare video
+  still blocked as a bot. It borrows the session from the browser you're already
+  signed in with. Off by default; Fluss picks the browser that works on your
+  system, so there is nothing to choose.
+
 ## v0.5.0
 
 **Fixes**
