@@ -44,7 +44,8 @@ pub fn run() {
             settings::get_settings,
             settings::save_settings,
             settings::default_download_dir,
-            settings::engine_versions
+            settings::engine_versions,
+            settings::update_engine
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

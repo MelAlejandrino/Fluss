@@ -22,6 +22,10 @@ interface SettingsState {
   /// The file on disk is damaged — saves are suspended so we don't destroy it.
   unreadable: boolean;
   load: () => Promise<void>;
+  /// Re-reads just the engine versions — after a self-update the displayed
+  /// number is stale, and a full `load()` would re-run the settings-file repair
+  /// prompt as a side effect.
+  refreshEngine: () => Promise<void>;
   update: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
 }
 
@@ -57,6 +61,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     // Falling back to defaults is fine; overwriting the file is not — the user
     // would lose their real settings to a save they never knew failed.
     if (unreadable) reportUnreadable("settings", () => set({ unreadable: false }));
+  },
+  refreshEngine: async () => {
+    const engine = await api.engineVersions().catch(() => get().engine);
+    set({ engine });
   },
   update: (key, value) => {
     const settings = { ...get().settings, [key]: value };

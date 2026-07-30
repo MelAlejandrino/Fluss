@@ -13,7 +13,7 @@ import { check as checkForUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import type { VideoMetadata, DownloadOptions } from "@/types/media";
 import type { DownloadProgressEvent, DownloadMetaEvent, DownloadHistoryItem } from "@/types/download";
-import type { Settings, EngineVersions } from "@/types/settings";
+import type { Settings, EngineVersions, EngineUpdate } from "@/types/settings";
 
 export type ResizeDir =
   | "East"
@@ -149,6 +149,10 @@ export const api = {
 
   engineVersions() {
     return invoke<EngineVersions>("engine_versions");
+  },
+
+  updateEngine() {
+    return invoke<EngineUpdate>("update_engine");
   },
 
   hasActiveDownloads() {

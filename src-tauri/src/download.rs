@@ -2,12 +2,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::binaries;
 
@@ -123,7 +123,15 @@ pub async fn start_download(
 
     let yt_dlp = binaries::resolve(&app, "yt-dlp");
     let ffmpeg = binaries::bundled_path(&app, "ffmpeg");
-    let mut args = build_args(&options, ffmpeg.as_deref());
+    // Intermediates always go to our scratch directory, even for "Keep partial
+    // files" — the thumbnail written for cover art is not something the user asked
+    // to keep, and it can't be told apart from their own images once it lands in
+    // their folder. Genuine partials are moved back out below.
+    let scratch = scratch_dir(&app, &id);
+    // `options` moves into the worker below; keep what the cleanup needs.
+    let output_directory = options.output_directory.clone();
+    let keep_partial = options.keep_partial;
+    let mut args = build_args(&options, ffmpeg.as_deref(), scratch.as_deref());
     // Insert the JS-runtime and cookie flags before the trailing URL.
     let mut extra = binaries::js_runtime_args(&app);
     extra.extend(binaries::solver_args());
@@ -175,6 +183,21 @@ pub async fn start_download(
 
     registry.0.lock().unwrap().remove(&id);
 
+    if let Some(dir) = &scratch {
+        // Only a failed or cancelled attempt has leftovers worth keeping — a
+        // finished download makes its own partials dead weight.
+        if keep_partial && result.is_err() {
+            preserve_partial_artifacts(dir, &output_directory);
+        }
+        // Whatever is left is ours and unwanted, however this ended.
+        let _ = fs::remove_dir_all(dir);
+    }
+    if let Ok(file_path) = &result {
+        // Clears this file's partials from an earlier cancelled attempt, which
+        // otherwise stayed in the folder forever once the retry succeeded.
+        clear_stale_artifacts(&output_directory, file_path);
+    }
+
     match result {
         Ok(file_path) => {
             log::info!("download {id}: completed");
@@ -221,6 +244,20 @@ pub fn force_cancel_all(registry: State<'_, DownloadRegistry>) {
     }
 }
 
+/// Per-download scratch directory for yt-dlp's intermediates (`.part` files and
+/// the thumbnail it writes before embedding it).
+///
+/// The point is that this directory is *ours*: it can be removed wholesale when
+/// the download ends, however it ends. The alternative — deleting files from the
+/// user's own output folder — is what caused the v0.5.0 data-loss bug, and an
+/// embedded thumbnail adds `.webp`/`.png` leftovers that can't be swept by
+/// extension there without risking the user's own images.
+fn scratch_dir(app: &AppHandle, id: &str) -> Option<PathBuf> {
+    let dir = app.path().app_cache_dir().ok()?.join("partials").join(id);
+    fs::create_dir_all(&dir).ok()?;
+    Some(dir)
+}
+
 /// True only for yt-dlp's own intermediates: the in-progress `.part`, its
 /// numbered `.part-FragN` pieces, and the `.ytdl` resume record.
 ///
@@ -234,6 +271,55 @@ fn is_partial_artifact(path: &Path) -> bool {
     };
     let ext = ext.to_ascii_lowercase();
     ext == "part" || ext == "ytdl" || ext.starts_with("part-frag")
+}
+
+/// Moves yt-dlp's partial artifacts out of our scratch directory into the output
+/// folder, for users who turned "Keep partial files" on and expect to find them.
+///
+/// The thumbnail intermediate is deliberately excluded — it isn't a partial
+/// download, just leftover scaffolding from embedding cover art, and it was the
+/// stray `.webp`/`.png` a cancelled download used to leave behind.
+fn preserve_partial_artifacts(scratch: &Path, output_directory: &str) {
+    let Ok(entries) = fs::read_dir(scratch) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let from = entry.path();
+        if !from.is_file() || !is_partial_artifact(&from) {
+            continue;
+        }
+        let Some(name) = from.file_name() else { continue };
+        let to = Path::new(output_directory).join(name);
+        // Rename is atomic within a volume, but the cache directory and the
+        // output folder can sit on different drives — fall back to a copy.
+        if fs::rename(&from, &to).is_err() {
+            let _ = fs::copy(&from, &to);
+        }
+    }
+}
+
+/// Removes the partial artifacts belonging to a file that has now downloaded in
+/// full — including ones left in the folder by an earlier cancelled attempt,
+/// which nothing used to clean up once the retry succeeded.
+///
+/// Scoped to that file's own name. Another download's `.part` may belong to a
+/// transfer still in flight, and deleting it would corrupt that download.
+fn clear_stale_artifacts(output_directory: &str, file_path: &str) {
+    let Some(stem) = Path::new(file_path).file_stem().and_then(|s| s.to_str()) else {
+        return;
+    };
+    let Ok(entries) = fs::read_dir(Path::new(output_directory)) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() || !is_partial_artifact(&path) {
+            continue;
+        }
+        if entry.file_name().to_string_lossy().starts_with(stem) {
+            let _ = fs::remove_file(&path);
+        }
+    }
 }
 
 /// Clears the failed attempt's leftovers when "Keep partial files" is off.
@@ -363,14 +449,23 @@ fn video_format(quality: Option<&str>) -> String {
 
 /// Translate structured options into yt-dlp arguments. URLs are data — passed
 /// as a discrete arg, never interpolated into a shell string.
-fn build_args(options: &DownloadOptions, ffmpeg: Option<&Path>) -> Vec<String> {
+fn build_args(
+    options: &DownloadOptions,
+    ffmpeg: Option<&Path>,
+    scratch: Option<&Path>,
+) -> Vec<String> {
     // Video filenames carry the resolution so the same source at different
     // qualities produces distinct files instead of colliding (yt-dlp would
     // otherwise skip the second as "already downloaded"). Audio has no
     // resolution, so it stays clean.
+    //
+    // The template is relative and the directory comes from `-P home:` — yt-dlp
+    // ignores every `-P` when the output template carries a path of its own, and
+    // `-P temp:` is the only thing that keeps intermediates out of the user's
+    // folder.
     let output_template = match options.format.as_str() {
-        "mp3" => format!("{}/%(title)s.%(ext)s", options.output_directory),
-        _ => format!("{}/%(title)s [%(height)sp].%(ext)s", options.output_directory),
+        "mp3" => "%(title)s.%(ext)s".to_string(),
+        _ => "%(title)s [%(height)sp].%(ext)s".to_string(),
     };
 
     let mut args: Vec<String> = vec![
@@ -426,6 +521,16 @@ fn build_args(options: &DownloadOptions, ffmpeg: Option<&Path>) -> Vec<String> {
         args.push("--keep-fragments".into());
     }
 
+    args.push("-P".into());
+    args.push(format!("home:{}", options.output_directory));
+    if let Some(scratch) = scratch {
+        // `.part` files and the thumbnail yt-dlp writes before embedding it land
+        // here instead of beside the user's media, so a cancelled download leaves
+        // nothing behind in their folder.
+        args.push("-P".into());
+        args.push(format!("temp:{}", scratch.to_string_lossy()));
+    }
+
     args.push("-o".into());
     args.push(output_template);
     args.push("--print".into());
@@ -454,7 +559,7 @@ mod tests {
 
     #[test]
     fn mp4_merges_to_mp4_and_url_is_last() {
-        let args = build_args(&opts("mp4"), None);
+        let args = build_args(&opts("mp4"), None, None);
         assert!(args.windows(2).any(|w| w == ["--merge-output-format", "mp4"]));
         assert_eq!(args.last().unwrap(), "https://example.com/watch?v=x");
         // Without this the captured %(filepath)s loses emoji and open/reveal 404s.
@@ -471,10 +576,89 @@ mod tests {
     #[test]
     fn both_formats_embed_metadata_and_cover_art() {
         for format in ["mp4", "mp3"] {
-            let args = build_args(&opts(format), None);
+            let args = build_args(&opts(format), None, None);
             assert!(args.contains(&"--embed-metadata".to_string()), "{format}");
             assert!(args.contains(&"--embed-thumbnail".to_string()), "{format}");
         }
+    }
+
+    #[test]
+    fn intermediates_are_written_to_our_scratch_dir_not_the_users_folder() {
+        // The thumbnail yt-dlp writes before embedding it is not a `.part` file,
+        // so cancelling used to leave a stray .webp/.png in the output folder.
+        // `-P temp:` keeps it (and the `.part`) somewhere we can delete wholesale.
+        let scratch = Path::new("/scratch/abc");
+        let args = build_args(&opts("mp3"), None, Some(scratch));
+        assert!(args.windows(2).any(|w| w == ["-P", "home:/out"]));
+        assert!(args
+            .windows(2)
+            .any(|w| w[0] == "-P" && w[1] == format!("temp:{}", scratch.display())));
+        // yt-dlp ignores every -P when the template carries its own path, so the
+        // template must stay relative for any of the above to take effect.
+        let template = args
+            .iter()
+            .position(|a| a == "-o")
+            .map(|i| args[i + 1].clone())
+            .expect("-o is passed");
+        assert!(!template.contains("/out"), "template must be relative: {template}");
+    }
+
+    #[test]
+    fn a_completed_download_clears_its_own_leftovers_only() {
+        let dir = std::env::temp_dir().join("fluss-stale-test");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let finished = dir.join("Video [720p].mp4");
+        fs::write(&finished, b"x").unwrap();
+        // This file's own leftovers, including from the cancelled first attempt.
+        let mine = ["Video [720p].mp4.part", "Video [720p].mp4.part-Frag0", "Video [720p].ytdl"];
+        // Another download's partial — possibly still being written to right now.
+        let others = ["Other Video.mp4.part", "Video [1080p].mp4.part"];
+        for f in mine.iter().chain(others.iter()) {
+            fs::write(dir.join(f), b"x").unwrap();
+        }
+
+        clear_stale_artifacts(&dir.to_string_lossy(), &finished.to_string_lossy());
+
+        for f in mine {
+            assert!(!dir.join(f).exists(), "{f} belongs to a finished download — should be gone");
+        }
+        for f in others {
+            assert!(dir.join(f).exists(), "{f} is another download's — must not be touched");
+        }
+        assert!(finished.exists(), "the downloaded file itself must survive");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn keep_partial_recovers_partials_but_never_the_thumbnail() {
+        let base = std::env::temp_dir().join("fluss-preserve-test");
+        let scratch = base.join("scratch");
+        let out = base.join("out");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&scratch).unwrap();
+        fs::create_dir_all(&out).unwrap();
+
+        // What yt-dlp leaves in scratch when a download is cancelled mid-flight.
+        for f in ["Video.mp4.part", "Video.mp4.part-Frag0", "Video.ytdl"] {
+            fs::write(scratch.join(f), b"x").unwrap();
+        }
+        // The cover-art scaffolding — not a partial download, and the reason a
+        // cancelled mp3 used to leave a stray image in the user's folder.
+        for f in ["Video.webp", "Video.png"] {
+            fs::write(scratch.join(f), b"x").unwrap();
+        }
+
+        preserve_partial_artifacts(&scratch, &out.to_string_lossy());
+
+        for f in ["Video.mp4.part", "Video.mp4.part-Frag0", "Video.ytdl"] {
+            assert!(out.join(f).exists(), "{f} was kept on purpose — must be recovered");
+        }
+        for f in ["Video.webp", "Video.png"] {
+            assert!(!out.join(f).exists(), "{f} is embedding junk — must not reach the user");
+        }
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]
@@ -511,13 +695,13 @@ mod tests {
     fn mp4_360p_passes_height_cap_to_yt_dlp() {
         let mut o = opts("mp4");
         o.quality = Some("360p".into());
-        let args = build_args(&o, None);
+        let args = build_args(&o, None, None);
         assert!(args.iter().any(|a| a.contains("height<=360")));
     }
 
     #[test]
     fn mp3_extracts_audio_with_clean_name() {
-        let args = build_args(&opts("mp3"), None);
+        let args = build_args(&opts("mp3"), None, None);
         assert!(args.contains(&"-x".to_string()));
         assert!(args.windows(2).any(|w| w == ["--audio-format", "mp3"]));
         // Audio has no resolution — keep the filename clean.
@@ -527,22 +711,22 @@ mod tests {
 
     #[test]
     fn overwrite_and_keep_partial_flags() {
-        let base = build_args(&opts("mp4"), None);
+        let base = build_args(&opts("mp4"), None, None);
         assert!(!base.contains(&"--force-overwrites".to_string()));
         assert!(!base.contains(&"--keep-fragments".to_string()));
 
         let mut o = opts("mp4");
         o.overwrite = true;
         o.keep_partial = true;
-        let args = build_args(&o, None);
+        let args = build_args(&o, None, None);
         assert!(args.contains(&"--force-overwrites".to_string()));
         assert!(args.contains(&"--keep-fragments".to_string()));
     }
 
     #[test]
     fn ffmpeg_location_only_when_bundled() {
-        assert!(!build_args(&opts("mp4"), None).contains(&"--ffmpeg-location".to_string()));
-        let with = build_args(&opts("mp4"), Some(Path::new("/bin/ffmpeg")));
+        assert!(!build_args(&opts("mp4"), None, None).contains(&"--ffmpeg-location".to_string()));
+        let with = build_args(&opts("mp4"), Some(Path::new("/bin/ffmpeg")), None);
         assert!(with.contains(&"--ffmpeg-location".to_string()));
     }
 

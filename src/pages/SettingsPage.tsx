@@ -38,6 +38,8 @@ export function SettingsPage() {
     repoUrl,
     chooseDefaultDirectory,
     openRepository,
+    updateEngine,
+    updatingEngine,
     checkForUpdates,
   } = useSettings();
 
@@ -121,6 +123,21 @@ export function SettingsPage() {
         <Row label="FFmpeg">
           <span className="font-mono text-xs text-on-surface-variant">{engine.ffmpeg}</span>
         </Row>
+        <button
+          onClick={updateEngine}
+          disabled={updatingEngine}
+          className="inline-flex w-fit items-center gap-2 rounded border border-outline-variant px-4 py-2 text-sm font-medium text-on-surface hover:border-outline disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <RefreshCw
+            className={`size-4 ${updatingEngine ? "animate-spin" : ""}`}
+            strokeWidth={1.5}
+          />
+          {updatingEngine ? "Updating engine…" : "Update engine"}
+        </button>
+        <p className="text-xs text-on-surface-variant">
+          Try this first if downloads stop working — sites change often, and a newer engine is
+          usually the fix.
+        </p>
       </Section>
 
       <Section title="About">

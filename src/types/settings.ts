@@ -14,6 +14,14 @@ export interface Settings {
   theme: Theme;
 }
 
+/// Outcome of yt-dlp's self-update. `updated` false covers both "already
+/// current" and "a package manager owns this install", which is why the message
+/// comes from Rust rather than being built here.
+export interface EngineUpdate {
+  message: string;
+  updated: boolean;
+}
+
 export interface EngineVersions {
   ytDlp: string;
   ffmpeg: string;

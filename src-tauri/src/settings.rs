@@ -85,6 +85,77 @@ pub async fn engine_versions(app: AppHandle) -> Result<EngineVersions, String> {
     .map_err(|e| e.to_string())
 }
 
+/// How `yt-dlp -U` went. Not a bool: "already current" and "updated" are both
+/// success but read differently, and a PATH install managed by pip/winget cannot
+/// self-update at all — telling the user it worked would be a lie.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EngineUpdate {
+    pub message: String,
+    pub updated: bool,
+}
+
+/// yt-dlp's own updater. Extraction breaks whenever a site changes, and a newer
+/// yt-dlp is nearly always the fix, so this is the most useful button in the app.
+#[tauri::command]
+pub async fn update_engine(app: AppHandle) -> Result<EngineUpdate, String> {
+    let yt_dlp = binaries::resolve(&app, "yt-dlp");
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut cmd = Command::new(&yt_dlp);
+        cmd.arg("-U");
+        binaries::prepare(&mut cmd);
+        let out = cmd
+            .output()
+            .map_err(|e| format!("Could not start the downloader engine: {e}"))?;
+        // yt-dlp reports the interesting part on stdout, failures on stderr.
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        if !out.status.success() {
+            log::error!("engine update failed: {}", text.trim());
+            return Err(text.trim().to_string());
+        }
+        log::info!("engine update: {}", text.trim());
+        Ok(parse_update(&text))
+    })
+    .await
+    .map_err(|e| format!("Update task failed: {e}"))?
+}
+
+/// Reads yt-dlp's update output. It exits 0 whether it updated, was already
+/// current, or refused because a package manager owns the install, so the words
+/// are the only signal.
+fn parse_update(out: &str) -> EngineUpdate {
+    let lower = out.to_lowercase();
+    let updated = lower.contains("updated yt-dlp to") || lower.contains("updating to version");
+    let message = if updated {
+        // "Updated yt-dlp to stable@2025.06.30" → keep the version, drop the noise.
+        out.lines()
+            .find(|l| l.to_lowercase().contains("updated yt-dlp to"))
+            .unwrap_or("The engine was updated.")
+            .trim()
+            .to_string()
+    } else if lower.contains("up to date") || lower.contains("up-to-date") {
+        "The engine is already up to date.".to_string()
+    } else if lower.contains("package manager") || lower.contains("not a self-updating build") {
+        // pip/winget/homebrew installs, and the dev fallback to PATH.
+        "This engine was installed by a package manager, so Fluss can't update it."
+            .to_string()
+    } else {
+        // Unrecognised but successful — show yt-dlp's own last word rather than
+        // inventing an outcome.
+        out.lines()
+            .filter(|l| !l.trim().is_empty())
+            .next_back()
+            .unwrap_or("The engine is up to date.")
+            .trim()
+            .to_string()
+    };
+    EngineUpdate { message, updated }
+}
+
 /// `yt-dlp --version` prints just "2025.06.30" — but nightly builds append a
 /// second line, so take the first.
 fn parse_yt_dlp_version(out: &str) -> String {
@@ -143,6 +214,29 @@ mod tests {
         if cfg!(target_os = "windows") {
             assert_eq!(preferred_browser(), "firefox");
         }
+    }
+
+    #[test]
+    fn update_output_maps_to_the_right_outcome() {
+        // yt-dlp exits 0 for all three of these, so the words are all we have.
+        let done = parse_update("Latest version: 2025.06.30\nUpdated yt-dlp to stable@2025.06.30");
+        assert!(done.updated);
+        assert!(done.message.contains("2025.06.30"));
+
+        let current = parse_update("yt-dlp is up to date (stable@2025.06.30)");
+        assert!(!current.updated);
+        assert!(current.message.contains("already up to date"));
+
+        // A pip/winget install can't self-update — claiming success would be a lie.
+        let managed = parse_update(
+            "ERROR: You installed yt-dlp with a package manager or setup.py; Use that to update",
+        );
+        assert!(!managed.updated);
+        assert!(managed.message.contains("package manager"));
+
+        // Never surface an empty message, whatever yt-dlp prints.
+        assert!(!parse_update("").message.is_empty());
+        assert!(!parse_update("\n\n").message.is_empty());
     }
 
     #[test]
