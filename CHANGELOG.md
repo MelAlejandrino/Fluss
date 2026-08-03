@@ -3,6 +3,18 @@
 The release workflow pulls the notes for a tag from the matching `## vX.Y.Z`
 section below. Keep the newest version at the top.
 
+## v0.8.0
+
+**Features**
+- **System tray.** Fluss now lives in the system tray when minimized. A tray
+  icon with a right-click menu ("Open Fluss" / "Quit") is available on all
+  platforms. Left-click the tray icon to bring the window back.
+- **Minimize to tray toggle** (Settings → General). When enabled, clicking the
+  close button hides Fluss to the tray instead of quitting — downloads keep
+  running in the background. Off by default.
+- **Ctrl/Cmd+Q** always quits the app, even if the tray icon is hidden (e.g.
+  on GNOME without extensions). Shows the active-download dialog when needed.
+
 ## v0.7.0
 
 **Fixes**
