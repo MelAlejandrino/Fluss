@@ -1,12 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
 import { requestInterrupt, performInterrupt } from "./interrupt";
 import { useUiStore } from "@/stores/uiStore";
 import { useDownloadStore } from "@/stores/downloadStore";
 import { api } from "@/lib/api";
 import type { DownloadItem } from "@/types/download";
 
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(),
+}));
 vi.mock("@/lib/api", () => ({
-  api: { forceCancelAll: vi.fn(), windowClose: vi.fn() },
+  api: { forceCancelAll: vi.fn() },
 }));
 
 const reload = vi.fn();
@@ -32,7 +36,7 @@ describe("interrupt (PLAN §45)", () => {
   it("goes straight through when nothing is downloading", () => {
     requestInterrupt("quit");
     expect(useUiStore.getState().pendingInterrupt).toBeNull(); // no dialog
-    expect(api.windowClose).toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalledWith("force_quit");
 
     requestInterrupt("reload");
     expect(reload).toHaveBeenCalled();
@@ -67,7 +71,7 @@ describe("interrupt (PLAN §45)", () => {
     useUiStore.getState().setPendingInterrupt(null);
 
     expect(api.forceCancelAll).not.toHaveBeenCalled();
-    expect(api.windowClose).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalled();
     expect(useDownloadStore.getState().downloads).toHaveLength(1);
   });
 });

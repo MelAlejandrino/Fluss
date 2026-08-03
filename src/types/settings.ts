@@ -11,6 +11,7 @@ export interface Settings {
   /// Which browser is decided in src-tauri/src/settings.rs, not here — it's
   /// OS-dependent and not something a user should have to reason about.
   useBrowserCookies: boolean;
+  minimizeToTray: boolean;
   theme: Theme;
 }
 

@@ -11,6 +11,19 @@ fn settings_file(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir.join("settings.json"))
 }
 
+/// Check if minimize-to-tray is enabled. Reads the setting directly from disk
+/// so it works even before the frontend has loaded. Defaults to `false`.
+pub fn minimize_to_tray(app: &AppHandle) -> bool {
+    let Ok(path) = settings_file(app) else {
+        return false;
+    };
+    let stored = store::read_json(&path, Value::Null).unwrap_or(Value::Null);
+    stored
+        .get("minimizeToTray")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
 /// Stored settings blob, or Null if none saved yet (frontend applies defaults).
 #[tauri::command]
 pub fn get_settings(app: AppHandle) -> Result<Value, String> {

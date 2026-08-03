@@ -18,6 +18,10 @@ import { useUpdateCheck } from "@/hooks/useUpdate";
 import { useContextMenu } from "@/hooks/useContextMenu";
 import { useNewDownloadShortcut } from "@/hooks/useNewDownloadShortcut";
 import { useReloadShortcut } from "@/hooks/useReloadShortcut";
+import { useQuitShortcut } from "@/hooks/useQuitShortcut";
+import { useSettingsStore } from "@/stores/settingsStore";
+import { useTray } from "@/hooks/useTray";
+import { api } from "@/lib/api";
 import { requestInterrupt, performInterrupt } from "@/lib/interrupt";
 import { pageTransition } from "@/lib/motion";
 
@@ -39,12 +43,21 @@ function App() {
   useContextMenu();
   useNewDownloadShortcut();
   useReloadShortcut();
+  useQuitShortcut();
+  useTray();
   const pendingInterrupt = useUiStore((s) => s.pendingInterrupt);
   const setPendingInterrupt = useUiStore((s) => s.setPendingInterrupt);
+  const minimizeToTray = useSettingsStore((s) => s.settings.minimizeToTray);
+
+  // X button: when minimize-to-tray is on, just close — Rust hides it.
+  // When off, go through the interrupt flow so the active-download dialog can appear.
+  const handleClose = minimizeToTray
+    ? () => api.windowClose()
+    : () => requestInterrupt("quit");
 
   return (
     <div className="flex h-screen flex-col">
-      <TitleBar onClose={() => requestInterrupt("quit")} />
+      <TitleBar onClose={handleClose} />
       <div className="min-h-0 flex-1">
         <AppShell>
           <AnimatePresence mode="wait">

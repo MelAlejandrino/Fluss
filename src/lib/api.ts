@@ -162,4 +162,13 @@ export const api = {
   forceCancelAll() {
     return invoke("force_cancel_all");
   },
+
+  // System tray (PLAN §V3).
+  onTrayQuitRequest(handler: () => void) {
+    return listen("tray-quit-request", () => handler());
+  },
+
+  windowHide() {
+    return getCurrentWindow().hide();
+  },
 };

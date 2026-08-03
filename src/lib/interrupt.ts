@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { useDownloadStore } from "@/stores/downloadStore";
 import { useUiStore } from "@/stores/uiStore";
 import { api } from "@/lib/api";
@@ -25,12 +26,10 @@ export function requestInterrupt(action: InterruptAction) {
 
 export function performInterrupt(action: InterruptAction) {
   useUiStore.getState().setPendingInterrupt(null);
-  // Stop the engines first. A reload leaves the Rust registry intact but wipes
-  // the store that knows about it — the downloads would run on invisibly, with
-  // nothing able to cancel them or record where the files went.
   api.forceCancelAll();
   if (action === "quit") {
-    api.windowClose();
+    // Bypass minimize-to-tray: the user explicitly confirmed they want to quit.
+    invoke("force_quit");
   } else {
     window.location.reload();
   }

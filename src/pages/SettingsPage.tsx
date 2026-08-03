@@ -71,6 +71,16 @@ export function SettingsPage() {
             onChange={(v) => update("desktopNotifications", v)}
           />
         </Row>
+        <Row
+          label="Minimize to system tray"
+          hint="Keep Fluss running in the background when you close the window."
+        >
+          <Toggle
+            label="Minimize to system tray"
+            checked={settings.minimizeToTray}
+            onChange={(v) => update("minimizeToTray", v)}
+          />
+        </Row>
       </Section>
 
       <Section title="Downloads">

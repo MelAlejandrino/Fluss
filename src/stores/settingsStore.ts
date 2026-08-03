@@ -11,6 +11,7 @@ const DEFAULTS: Settings = {
   overwriteExisting: false,
   keepPartialFiles: false,
   useBrowserCookies: false,
+  minimizeToTray: false,
   theme: "system",
 };
 
