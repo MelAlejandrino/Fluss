@@ -13,14 +13,14 @@ export function DownloadCard({ item, onOpen, onReveal, onCancel, onRetry }: Down
     <div
       data-menu="download"
       data-menu-id={item.id}
-      className="flex gap-4 rounded-sm border border-outline-variant bg-surface-container-low p-4 transition-colors hover:border-outline"
+      className="flex gap-5 rounded-sm border border-outline-variant bg-surface-container-low p-5 transition-colors hover:border-outline"
     >
-      <Thumbnail src={item.thumbnailUrl} />
+      <Thumbnail src={item.thumbnailUrl} className="w-40" />
 
-      <div className="flex min-w-0 flex-1 flex-col gap-2">
+      <div className="flex min-w-0 flex-1 flex-col gap-2.5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="truncate text-base font-semibold text-on-surface">
+            <h3 className="truncate font-display text-base font-semibold leading-snug text-on-surface">
               {item.title ?? item.url}
             </h3>
             <p className="font-mono text-[11px] uppercase tracking-widest text-on-surface-variant">
@@ -34,7 +34,7 @@ export function DownloadCard({ item, onOpen, onReveal, onCancel, onRetry }: Down
         {showProgress && <DownloadProgress item={item} />}
 
         {item.status === "failed" && item.error && (
-          <div className="flex items-start gap-2 rounded-sm border border-error/40 bg-error/10 p-2.5">
+          <div className="flex items-start gap-2.5 rounded-sm border border-error/40 bg-error/10 p-3">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-error" strokeWidth={1.5} />
             <div className="min-w-0 flex-1">
               <p className="text-xs text-on-surface">{item.error}</p>
@@ -58,14 +58,14 @@ export function DownloadCard({ item, onOpen, onReveal, onCancel, onRetry }: Down
               <>
                 <button
                   onClick={() => onOpen(item.filePath)}
-                  className="inline-flex items-center gap-1.5 rounded bg-primary px-3 py-1.5 text-xs font-medium text-on-primary hover:bg-primary/90 active:scale-[0.98]"
+                  className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3.5 py-2 text-xs font-medium text-on-primary hover:bg-primary/90 active:scale-[0.98]"
                 >
                   <Play className="size-3.5" strokeWidth={1.5} />
                   Open File
                 </button>
                 <button
                   onClick={() => (onReveal ?? onOpen)(item.filePath)}
-                  className="inline-flex items-center gap-1.5 rounded border border-outline-variant px-3 py-1.5 text-xs font-medium text-on-surface hover:border-outline"
+                  className="inline-flex items-center gap-1.5 rounded-sm border border-outline-variant px-3.5 py-2 text-xs font-medium text-on-surface hover:border-outline"
                 >
                   <FolderOpen className="size-3.5" strokeWidth={1.5} />
                   Show in Folder
@@ -75,7 +75,7 @@ export function DownloadCard({ item, onOpen, onReveal, onCancel, onRetry }: Down
             {canRetry && onRetry && (
               <button
                 onClick={() => onRetry(item.id)}
-                className="inline-flex items-center gap-1.5 rounded bg-primary px-3 py-1.5 text-xs font-medium text-on-primary hover:bg-primary/90 active:scale-[0.98]"
+                className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3.5 py-2 text-xs font-medium text-on-primary hover:bg-primary/90 active:scale-[0.98]"
               >
                 <RotateCcw className="size-3.5" strokeWidth={1.5} />
                 Retry
@@ -84,7 +84,7 @@ export function DownloadCard({ item, onOpen, onReveal, onCancel, onRetry }: Down
             {showProgress && onCancel && (
               <button
                 onClick={() => onCancel(item.id)}
-                className="inline-flex items-center gap-1.5 rounded border border-outline-variant px-3 py-1.5 text-xs font-medium text-on-surface hover:border-outline"
+                className="inline-flex items-center gap-1.5 rounded-sm border border-outline-variant px-3.5 py-2 text-xs font-medium text-on-surface hover:border-outline"
               >
                 <X className="size-3.5" strokeWidth={1.5} />
                 Cancel

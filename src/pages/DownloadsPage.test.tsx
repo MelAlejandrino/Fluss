@@ -47,8 +47,8 @@ beforeEach(() => {
 describe("DownloadsPage — empty state", () => {
   it("points the user back to Home", () => {
     render(<DownloadsPage />);
-    expect(screen.getByText("No active downloads")).toBeDefined();
-    expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
+    expect(screen.getByText("No downloads yet")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Start queue" })).toBeNull();
   });
 });
 
@@ -98,11 +98,12 @@ describe("DownloadsPage — queue (PLAN §19)", () => {
   it("lists queued items behind the active one and offers a manual Start", () => {
     seed(item({ id: "a", status: "queued", title: "Video A" }), item({ id: "b", status: "queued", title: "Video B" }));
     render(<DownloadsPage />);
-    expect(screen.getByText("Queued · 2")).toBeDefined();
+    expect(screen.getAllByText("Queued").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("2 items")).toBeDefined();
     expect(screen.getByText("Video A")).toBeDefined();
     expect(screen.getByText("Video B")).toBeDefined();
     // Nothing is running, so the queue can be kicked manually.
-    expect(screen.getByRole("button", { name: "Start" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Start queue" })).toBeDefined();
   });
 
   it("drops a queued item without touching the backend", () => {

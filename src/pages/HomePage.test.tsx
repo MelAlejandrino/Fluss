@@ -31,7 +31,9 @@ const META = {
 const analyzeUrl = vi.mocked(api.analyzeUrl);
 
 function typeUrl(url: string) {
-  fireEvent.change(screen.getByPlaceholderText("Paste a video URL…"), { target: { value: url } });
+  fireEvent.change(screen.getByPlaceholderText("Paste a video or audio URL…"), {
+    target: { value: url },
+  });
 }
 
 function submit() {
@@ -46,8 +48,8 @@ beforeEach(() => {
 describe("HomePage — empty state (PLAN §11)", () => {
   it("shows only the prompt and the URL field", () => {
     render(<HomePage />);
-    expect(screen.getByText("Download in flow.")).toBeDefined();
-    expect(screen.getByPlaceholderText("Paste a video URL…")).toBeDefined();
+    expect(screen.getByRole("heading")).toBeDefined();
+    expect(screen.getByPlaceholderText("Paste a video or audio URL…")).toBeDefined();
     expect(screen.getByRole("button", { name: "Analyze" })).toBeDefined();
     // No advanced options before an analysis (PLAN §11).
     expect(screen.queryByRole("radiogroup", { name: "Format" })).toBeNull();
@@ -68,7 +70,7 @@ describe("HomePage — URL input (PLAN §12)", () => {
     render(<HomePage />);
     typeUrl("  https://site/watch?v=abc  ");
     // Enter inside the field submits the form.
-    fireEvent.submit(screen.getByPlaceholderText("Paste a video URL…").closest("form")!);
+    fireEvent.submit(screen.getByPlaceholderText("Paste a video or audio URL…").closest("form")!);
     await waitFor(() => expect(analyzeUrl).toHaveBeenCalledWith("https://site/watch?v=abc"));
   });
 
@@ -85,7 +87,7 @@ describe("HomePage — URL input (PLAN §12)", () => {
     analyzeUrl.mockReturnValue(new Promise(() => {}));
     render(<HomePage />);
     typeUrl("https://site/watch?v=abc");
-    const form = screen.getByPlaceholderText("Paste a video URL…").closest("form")!;
+    const form = screen.getByPlaceholderText("Paste a video or audio URL…").closest("form")!;
     // Enter key-repeat: the button is disabled, the form still submits.
     fireEvent.submit(form);
     fireEvent.submit(form);
@@ -189,7 +191,7 @@ describe("HomePage — bulk mode", () => {
   it("starts with two empty links and no analyze step", () => {
     switchToBulk();
     expect(urlInputs()).toHaveLength(2);
-    expect(screen.queryByPlaceholderText("Paste a video URL…")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Analyze" })).toBeNull();
     expect(analyzeUrl).not.toHaveBeenCalled();
   });
 

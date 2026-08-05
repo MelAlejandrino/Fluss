@@ -22,11 +22,9 @@ export function Segmented<T extends string>({
       <span className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
         {label}
       </span>
-      {/* Separate pills, not one joined bar: the quality ladder runs to 9
-          options and has to wrap in a narrow column. A joined bar draws its
-          dividers with a background behind 1px gaps, which leaves a grey
-          stripe in whatever space the last wrapped row doesn't fill. */}
-      <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1.5">
+      {/* Grid layout keeps pills balanced when wrapping — no orphaned item
+          alone on the last row. 3 columns fits 6 quality options neatly. */}
+      <div role="radiogroup" aria-label={label} className="grid grid-cols-3 gap-1.5">
         {options.map((opt) => {
           const active = opt.value === value;
           return (
