@@ -19,4 +19,6 @@ export interface DownloadOptions {
   quality?: VideoQuality;
   overwrite?: boolean;
   keepPartial?: boolean;
+  /** Title from a previous attempt, used to restore partial files on retry. */
+  previousTitle?: string;
 }

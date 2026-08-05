@@ -18,6 +18,8 @@ export interface DownloadItem {
   format: DownloadFormat;
   quality?: VideoQuality;
   outputDirectory: string;
+  /** Title from a previous attempt, used to restore partial files on retry. */
+  previousTitle?: string;
   status: DownloadStatus;
   progress: number;
   downloadedBytes?: number;

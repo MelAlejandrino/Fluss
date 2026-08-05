@@ -15,6 +15,8 @@ export interface EnqueueInput {
   format: DownloadFormat;
   quality: VideoQuality;
   outputDirectory: string;
+  /** Title from a previous attempt, used to restore partial files on retry. */
+  previousTitle?: string;
 }
 
 /// The next download to start: nothing if one is already active, else the
@@ -44,6 +46,7 @@ export function enqueue(input: EnqueueInput) {
     format: input.format,
     quality: input.quality,
     outputDirectory: input.outputDirectory,
+    previousTitle: input.previousTitle,
     status: "queued",
     progress: 0,
     createdAt: new Date().toISOString(),
@@ -143,6 +146,7 @@ function processQueue() {
       quality: next.quality,
       overwrite: settings.overwriteExisting,
       keepPartial: settings.keepPartialFiles,
+      previousTitle: next.previousTitle,
     })
     .then(({ filePath }) => {
       store.update(next.id, {
@@ -190,6 +194,7 @@ export function retry(id: string) {
     format: item.format,
     quality: item.quality ?? "best",
     outputDirectory: item.outputDirectory,
+    previousTitle: item.title,
   });
 }
 

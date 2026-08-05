@@ -36,6 +36,7 @@ export function useHistory() {
       format: item.format,
       quality: item.quality ?? "best",
       outputDirectory: item.outputDirectory,
+      previousTitle: item.title,
     });
   }
 

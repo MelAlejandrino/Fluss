@@ -33,6 +33,9 @@ pub struct DownloadOptions {
     pub overwrite: bool,
     #[serde(default)]
     pub keep_partial: bool,
+    /// Title from a previous attempt, used to restore partial files on retry.
+    #[serde(default)]
+    pub previous_title: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -131,6 +134,14 @@ pub async fn start_download(
     // `options` moves into the worker below; keep what the cleanup needs.
     let output_directory = options.output_directory.clone();
     let keep_partial = options.keep_partial;
+    // If the user keeps partial files and this is a retry, restore the
+    // previous attempt's `.part`/`.ytdl` files from the output directory into
+    // the fresh scratch directory so yt-dlp can find them and resume.
+    if keep_partial {
+        if let (Some(s), Some(title)) = (&scratch, &options.previous_title) {
+            restore_partial_files(s, &options.output_directory, title);
+        }
+    }
     let mut args = build_args(&options, ffmpeg.as_deref(), scratch.as_deref());
     // Insert the JS-runtime and cookie flags before the trailing URL.
     let mut extra = binaries::js_runtime_args(&app);
@@ -294,6 +305,54 @@ fn preserve_partial_artifacts(scratch: &Path, output_directory: &str) {
         // output folder can sit on different drives — fall back to a copy.
         if fs::rename(&from, &to).is_err() {
             let _ = fs::copy(&from, &to);
+        }
+    }
+}
+
+/// Restores partial artifacts from the output directory back into the scratch
+/// directory so yt-dlp can find them and resume a previously cancelled download.
+///
+/// When "Keep partial files" is on and a download is cancelled, the `.part` and
+/// `.ytdl` files are moved to the user's output folder. On retry, a new scratch
+/// directory is created — yt-dlp can't see the old partials and starts from
+/// zero. This function copies matching files back so resume works.
+fn restore_partial_files(scratch: &Path, output_directory: &str, previous_title: &str) {
+    let Ok(entries) = fs::read_dir(Path::new(output_directory)) else {
+        return;
+    };
+    // yt-dlp sanitises title characters that are illegal in filenames (/, \, :, *,
+    // etc.) by replacing them with `_`. The raw title from metadata won't match
+    // the sanitised version in the `.part` filename, so normalise the needle the
+    // same way before comparing.
+    let needle = previous_title
+        .replace('/', "_")
+        .replace('\\', "_")
+        .replace(':', "_")
+        .replace('*', "_")
+        .replace('?', "_")
+        .replace('"', "_")
+        .replace('<', "_")
+        .replace('>', "_")
+        .replace('|', "_")
+        .to_ascii_lowercase();
+    for entry in entries.flatten() {
+        let from = entry.path();
+        if !from.is_file() || !is_partial_artifact(&from) {
+            continue;
+        }
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy().to_ascii_lowercase();
+        // yt-dlp's output template puts the title at the start of the filename,
+        // so starts_with is the correct check. contains would be too broad —
+        // a title like "a" would match every partial file in the folder.
+        if name_str.starts_with(&needle) {
+            let to = scratch.join(&name);
+            if fs::rename(&from, &to).is_err() {
+                let _ = fs::copy(&from, &to);
+                // Clean up the original when copy was used (cross-volume) so
+                // the partial doesn't live in both directories simultaneously.
+                let _ = fs::remove_file(&from);
+            }
         }
     }
 }
@@ -554,6 +613,7 @@ mod tests {
             quality: Some("best".into()),
             overwrite: false,
             keep_partial: false,
+            previous_title: None,
         }
     }
 
@@ -658,6 +718,59 @@ mod tests {
         for f in ["Video.webp", "Video.png"] {
             assert!(!out.join(f).exists(), "{f} is embedding junk — must not reach the user");
         }
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn restore_partial_files_copies_matching_partials_to_scratch() {
+        let base = std::env::temp_dir().join("fluss-restore-test");
+        let scratch = base.join("scratch");
+        let out = base.join("out");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&scratch).unwrap();
+        fs::create_dir_all(&out).unwrap();
+
+        // Partial files left in the output directory from a cancelled attempt.
+        for f in ["My Great Video [720p].mp4.part", "My Great Video [720p].mp4.part-Frag0", "My Great Video [720p].mp4.ytdl"] {
+            fs::write(out.join(f), b"x").unwrap();
+        }
+        // Another download's partials — title doesn't start with "My Great Video".
+        fs::write(out.join("Totally Different Song.mp3.part"), b"x").unwrap();
+        // Edge case: title is a substring but not at the start.
+        fs::write(out.join("Not My Great Video.mp4.part"), b"x").unwrap();
+
+        restore_partial_files(&scratch, &out.to_string_lossy(), "My Great Video");
+
+        // Matching partials should now be in the scratch directory.
+        for f in ["My Great Video [720p].mp4.part", "My Great Video [720p].mp4.part-Frag0", "My Great Video [720p].mp4.ytdl"] {
+            assert!(scratch.join(f).exists(), "{f} should be restored to scratch");
+            assert!(!out.join(f).exists(), "{f} should be moved out of output dir");
+        }
+        // Other downloads' partials remain in the output directory.
+        assert!(out.join("Totally Different Song.mp3.part").exists());
+        assert!(out.join("Not My Great Video.mp4.part").exists());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn restore_partial_files_normalises_colon_in_title() {
+        let base = std::env::temp_dir().join("fluss-restore-sanitise-test");
+        let scratch = base.join("scratch");
+        let out = base.join("out");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&scratch).unwrap();
+        fs::create_dir_all(&out).unwrap();
+
+        // Raw title "Video: Part 2" → sanitised to "Video_ Part 2" in filename.
+        fs::write(out.join("Video_ Part 2 [720p].mp4.part"), b"x").unwrap();
+        fs::write(out.join("Video_ Part 2 [720p].mp4.ytdl"), b"x").unwrap();
+
+        restore_partial_files(&scratch, &out.to_string_lossy(), "Video: Part 2");
+
+        assert!(scratch.join("Video_ Part 2 [720p].mp4.part").exists());
+        assert!(scratch.join("Video_ Part 2 [720p].mp4.ytdl").exists());
+        assert!(!out.join("Video_ Part 2 [720p].mp4.part").exists());
+        assert!(!out.join("Video_ Part 2 [720p].mp4.ytdl").exists());
         let _ = fs::remove_dir_all(&base);
     }
 
