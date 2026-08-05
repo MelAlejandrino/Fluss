@@ -21,11 +21,23 @@ function isMediaUrl(text: string): boolean {
 }
 
 const POLL_MS = 1500;
+const COOLDOWN_MS = 10_000;
+
+function clipboardUrlInInput(url: string): boolean {
+  const inputs = document.querySelectorAll(
+    'input[type="text"]',
+  ) as NodeListOf<HTMLInputElement>;
+  for (const input of inputs) {
+    if (input.value.trim() === url) return true;
+  }
+  return false;
+}
 
 export function useClipboardMonitor() {
   const enabled = useSettingsStore((s) => s.settings.clipboardMonitoring);
   const requestAnalyze = useUiStore((s) => s.requestAnalyze);
   const lastSeen = useRef<string>("");
+  const cooldownUntil = useRef(0);
 
   useEffect(() => {
     if (!enabled) return;
@@ -48,6 +60,15 @@ export function useClipboardMonitor() {
         if (!isMediaUrl(trimmed)) return;
 
         lastSeen.current = trimmed;
+
+        // If this URL is already typed/pasted into any input field, the
+        // user is already using it — no popup needed.
+        if (clipboardUrlInInput(trimmed)) return;
+
+        // Suppress repeated toasts in quick succession.
+        if (Date.now() < cooldownUntil.current) return;
+
+        cooldownUntil.current = Date.now() + COOLDOWN_MS;
 
         notify("Media URL detected in clipboard", "info", [
           {
