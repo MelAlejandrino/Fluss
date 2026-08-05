@@ -3,6 +3,22 @@
 The release workflow pulls the notes for a tag from the matching `## vX.Y.Z`
 section below. Keep the newest version at the top.
 
+## v0.9.0
+
+**Features**
+- **Clipboard monitoring.** Fluss now watches your clipboard for URLs
+  automatically. Copy a link and the URL field fills itself — no need to
+  manually paste.
+
+**Fixes**
+- **Partial files were not resumed on retry.** When "Keep partial files" was
+  enabled, retrying a download that had been cancelled started from scratch
+  instead of resuming where it left off.
+
+**UI**
+- Redesigned home page and refined downloads page layout.
+- Consistent heading design applied to history and settings pages.
+
 ## v0.8.0
 
 **Features**
