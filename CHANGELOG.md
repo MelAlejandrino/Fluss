@@ -3,6 +3,15 @@
 The release workflow pulls the notes for a tag from the matching `## vX.Y.Z`
 section below. Keep the newest version at the top.
 
+## v0.9.1
+
+**Fixes**
+- **Clipboard monitor no longer fires when you paste into the app.** Pasting a
+  URL from the clipboard history (Win+V) or any other source into a URL input
+  field no longer triggers the "Media URL detected" popup. The monitor now reads
+  the DOM to check whether the URL is already in an input before showing the
+  toast.
+
 ## v0.9.0
 
 **Features**
