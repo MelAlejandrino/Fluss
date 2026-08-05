@@ -21,6 +21,7 @@ import { useReloadShortcut } from "@/hooks/useReloadShortcut";
 import { useQuitShortcut } from "@/hooks/useQuitShortcut";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useTray } from "@/hooks/useTray";
+import { useClipboardMonitor } from "@/hooks/useClipboardMonitor";
 import { api } from "@/lib/api";
 import { requestInterrupt, performInterrupt } from "@/lib/interrupt";
 import { pageTransition } from "@/lib/motion";
@@ -45,6 +46,7 @@ function App() {
   useReloadShortcut();
   useQuitShortcut();
   useTray();
+  useClipboardMonitor();
   const pendingInterrupt = useUiStore((s) => s.pendingInterrupt);
   const setPendingInterrupt = useUiStore((s) => s.setPendingInterrupt);
   const minimizeToTray = useSettingsStore((s) => s.settings.minimizeToTray);

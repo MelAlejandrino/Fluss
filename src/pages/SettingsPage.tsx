@@ -91,6 +91,16 @@ export function SettingsPage() {
             onChange={(v) => update("minimizeToTray", v)}
           />
         </Row>
+        <Row
+          label="Clipboard monitoring"
+          hint="Watch for copied media URLs and offer to download them."
+        >
+          <Toggle
+            label="Clipboard monitoring"
+            checked={settings.clipboardMonitoring}
+            onChange={(v) => update("clipboardMonitoring", v)}
+          />
+        </Row>
       </Section>
 
       <Section title="Downloads">

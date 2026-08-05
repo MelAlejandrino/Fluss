@@ -12,6 +12,7 @@ export interface Settings {
   /// OS-dependent and not something a user should have to reason about.
   useBrowserCookies: boolean;
   minimizeToTray: boolean;
+  clipboardMonitoring: boolean;
   theme: Theme;
 }
 

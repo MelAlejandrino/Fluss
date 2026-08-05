@@ -12,6 +12,7 @@ const DEFAULTS: Settings = {
   keepPartialFiles: false,
   useBrowserCookies: false,
   minimizeToTray: false,
+  clipboardMonitoring: false,
   theme: "system",
 };
 
