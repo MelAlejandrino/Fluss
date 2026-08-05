@@ -1,8 +1,9 @@
 import { FolderClosed, ExternalLink, RefreshCw } from "lucide-react";
-import { PageHeader } from "@/components/common/PageHeader";
+import { motion } from "motion/react";
 import { Toggle } from "@/components/common/Toggle";
 import { Segmented } from "@/components/common/Segmented";
 import { useSettings } from "@/hooks/useSettings";
+import { EASE } from "@/lib/motion";
 import type { Theme } from "@/types/settings";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -44,8 +45,17 @@ export function SettingsPage() {
   } = useSettings();
 
   return (
-    <div className="mx-auto max-w-2xl px-8 py-10">
-      <PageHeader title="Settings" />
+    <div className="mx-auto flex min-h-full max-w-2xl flex-col px-8 py-16">
+      <div className="mb-10">
+        <motion.h1
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: EASE }}
+          className="font-display text-[2.75rem] font-semibold leading-[1.1] tracking-tight text-on-surface"
+        >
+          Settings
+        </motion.h1>
+      </div>
 
       <Section title="General">
         <Row label="Default download location">

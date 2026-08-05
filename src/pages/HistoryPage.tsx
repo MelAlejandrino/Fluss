@@ -1,8 +1,9 @@
 import { History, Play, FolderOpen, RotateCcw, Check, AlertTriangle, X } from "lucide-react";
-import { PageHeader } from "@/components/common/PageHeader";
+import { motion } from "motion/react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { useHistory } from "@/hooks/useHistory";
 import { formatDate } from "@/lib/formatters";
+import { EASE } from "@/lib/motion";
 import type { DownloadHistoryItem } from "@/types/download";
 
 const STATUS_ICON = {
@@ -54,8 +55,26 @@ export function HistoryPage() {
   const { history, isLoading, open, showInFolder, retry, remove } = useHistory();
 
   return (
-    <div className="mx-auto max-w-4xl px-8 py-10">
-      <PageHeader title="History" description="Previously downloaded media." />
+    <div className="mx-auto flex min-h-full max-w-4xl flex-col px-8 py-16">
+      <div className="mb-10">
+        <motion.h1
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: EASE }}
+          className="font-display text-[2.75rem] font-semibold leading-[1.1] tracking-tight text-on-surface"
+        >
+          History
+        </motion.h1>
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.4, delay: 0.15, ease: EASE }}
+          className="mt-3 text-sm text-on-surface-variant"
+        >
+          Previously downloaded media.
+        </motion.p>
+      </div>
+
       {isLoading ? (
         <Skeleton />
       ) : history.length === 0 ? (
