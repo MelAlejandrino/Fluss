@@ -3,6 +3,40 @@
 The release workflow pulls the notes for a tag from the matching `## vX.Y.Z`
 section below. Keep the newest version at the top.
 
+## v0.10.0
+
+**UI**
+- **Fluss has been redesigned from the ground up.** New colour system, type
+  scale, shape language, motion, and a reusable component library that every
+  screen is now built from. The app reads as a calm background utility: neutral
+  layered surfaces, depth from layering rather than shadows, and a single accent
+  green reserved for state — so anything green on screen means something is
+  flowing or finished.
+- **New app shell.** The navigation rail and title bar now sit directly on the
+  window background with the page floating above them as a rounded sheet. The
+  rail collapses to icons on narrow windows, keeps labels as tooltips, and shows
+  a count of outstanding downloads.
+- **One typeface.** Geist carries the whole interface; Geist Mono is used only
+  for data that must not reflow — URLs, paths, byte counts, speeds, versions.
+  Live figures are tabular, so a running download no longer makes the numbers
+  twitch on every update.
+- **Errors read the same everywhere.** The inline analysis error, a failed
+  download, and an error toast now share one treatment: plain-language reason on
+  a neutral surface with the raw engine output behind "View details".
+- **Loading shows shape, not spinners.** Analysing a link and opening History
+  now render placeholders the size of what's arriving, so nothing jumps into
+  place when the data lands.
+- **History is searchable.** Filter by title or link, and narrow to completed or
+  unfinished downloads.
+- **Empty states explain themselves** instead of stating that a list is empty.
+
+**Fixes**
+- **No more white flash against the dark theme.** The window is now painted in
+  the app's own background colour, matching the saved theme (or the system one),
+  and repainted when the theme changes. Previously a white window layer showed
+  before first paint and in the not-yet-repainted strip while dragging a window
+  larger.
+
 ## v0.9.1
 
 **Fixes**
