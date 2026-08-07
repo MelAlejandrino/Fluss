@@ -14,7 +14,10 @@
             t === "dark" ||
             (t === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
           document.documentElement.dataset.theme = dark ? "dark" : "light";
-          document.documentElement.style.backgroundColor = dark ? "#12140f" : "#fcf9f4";
+          // Must match --color-app in index.css for both themes.
+          document.documentElement.style.backgroundColor = dark
+            ? "oklch(0.172 0.006 152)"
+            : "oklch(0.949 0.004 152)";
         } catch (e) {}
       })();
     </script>

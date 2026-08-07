@@ -103,7 +103,7 @@ See the [ARCHITECTURE.md](./ARCHITECTURE.md) and [DESIGN.md](./DESIGN.md) for co
 
 ## Design
 
-Fluss follows a **Technical Minimalism** design philosophy -- warm archival-paper surfaces, sharp 1px borders, tonal layering instead of shadows, and careful typography (Fraunces for headings, Geist for UI, Geist Mono for technical data). See [DESIGN.md](./DESIGN.md) for the full design system.
+Fluss is designed as a **glanceable background utility** -- it sits beside a browser, often in the tray, and gets checked rather than read. Neutral layered surfaces in OKLCH, depth from layering rather than shadows, and a single accent green reserved entirely for state, so anything green on screen means something is flowing or finished. One typeface (Geist) carries the interface; Geist Mono is used only for data that must not reflow -- URLs, paths, byte counts, speeds. Every screen is composed from the primitives in `src/components/ui/`. See [DESIGN.md](./DESIGN.md) for the full system and [DESIGN_PATTERN.md](./DESIGN_PATTERN.md) for layout patterns.
 
 ---
 

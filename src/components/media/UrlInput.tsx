@@ -1,13 +1,24 @@
-import { Loader2, Search } from "lucide-react";
+import { Link2 } from "lucide-react";
 import { useUrlInput } from "@/hooks/useUrlInput";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 
 interface UrlInputProps {
   onSubmit: (url: string) => void;
   isLoading?: boolean;
 }
 
+/**
+ * The command bar — the app's front door, and the only control on Home until
+ * something has been analysed.
+ *
+ * It's one tall field with the action living inside its focus ring rather than
+ * a field-plus-button pair, so paste-and-go reads as a single gesture. The URL
+ * itself is mono: links are data, and a proportional font makes a long one
+ * shift under the cursor as it's typed over.
+ */
 export function UrlInput({ onSubmit, isLoading }: UrlInputProps) {
-  const { url, setUrl, submit, inputRef } = useUrlInput(onSubmit);
+  const { url, setUrl, submit, inputRef, error } = useUrlInput(onSubmit);
 
   return (
     <form
@@ -15,31 +26,33 @@ export function UrlInput({ onSubmit, isLoading }: UrlInputProps) {
         e.preventDefault();
         submit();
       }}
-      className="flex w-full gap-2"
+      className="flex flex-col gap-2"
     >
-      <input
+      <Input
         ref={inputRef}
-        type="text"
+        inputSize="lg"
+        mono
+        invalid={!!error}
         value={url}
         onChange={(e) => setUrl(e.target.value)}
-        placeholder="Paste a video URL…"
+        placeholder="Paste a video or audio URL…"
         autoFocus
-        // Focus ring is an outline, not a thicker border — a border-width change
-        // resizes the input and reflows the whole centered column.
-        className="flex-1 rounded border border-outline-variant bg-surface-container-low px-4 py-3 font-mono text-sm text-on-surface placeholder:text-on-surface-variant/60 focus:border-primary focus:outline-2 focus:-outline-offset-2 focus:outline-primary"
+        spellCheck={false}
+        autoComplete="off"
+        aria-label="Media URL"
+        aria-describedby={error ? "url-error" : undefined}
+        icon={<Link2 strokeWidth={1.75} />}
+        trailing={
+          <Button type="submit" variant="primary" loading={isLoading}>
+            Analyze
+          </Button>
+        }
       />
-      <button
-        type="submit"
-        disabled={isLoading}
-        className="inline-flex items-center justify-center gap-2 rounded bg-primary px-6 py-3 text-sm font-medium tracking-wide text-on-primary transition-all hover:bg-primary/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {isLoading ? (
-          <Loader2 className="size-4 animate-spin" strokeWidth={1.5} />
-        ) : (
-          <Search className="size-4" strokeWidth={1.5} />
-        )}
-        Analyze
-      </button>
+      {error && (
+        <p id="url-error" role="alert" className="pl-1 text-sm text-danger-ink">
+          {error}
+        </p>
+      )}
     </form>
   );
 }

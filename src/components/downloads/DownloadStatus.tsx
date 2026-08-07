@@ -1,24 +1,29 @@
-import { Check, Download, Clock, X, AlertTriangle, Cog } from "lucide-react";
 import type { DownloadStatus as Status } from "@/types/download";
+import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { cn } from "@/lib/cn";
 
-// Text + icon + color, never color alone (a11y, DESIGN §50).
-const MAP: Record<Status, { label: string; icon: typeof Check; className: string }> = {
-  queued: { label: "Queued", icon: Clock, className: "text-on-surface-variant" },
-  downloading: { label: "Downloading", icon: Download, className: "text-primary" },
-  processing: { label: "Processing", icon: Cog, className: "text-primary" },
-  completed: { label: "Completed", icon: Check, className: "text-primary" },
-  failed: { label: "Failed", icon: AlertTriangle, className: "text-error" },
-  cancelled: { label: "Cancelled", icon: X, className: "text-on-surface-variant" },
+/**
+ * Status chip. The word is the message and the colour only reinforces it —
+ * status is never carried by hue alone.
+ *
+ * `live` marks the two states that are genuinely in motion; their dot breathes
+ * so a glance at a stack of cards separates "running" from "waiting" without
+ * reading a single label.
+ */
+const MAP: Record<Status, { label: string; tone: BadgeTone; live?: boolean }> = {
+  queued: { label: "Queued", tone: "neutral" },
+  downloading: { label: "Downloading", tone: "accent", live: true },
+  processing: { label: "Processing", tone: "accent", live: true },
+  completed: { label: "Completed", tone: "accent" },
+  failed: { label: "Failed", tone: "danger" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
 };
 
 export function DownloadStatus({ status }: { status: Status }) {
-  const { label, icon: Icon, className } = MAP[status];
+  const { label, tone, live } = MAP[status];
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest ${className}`}
-    >
-      <Icon className="size-3.5" strokeWidth={2} />
+    <Badge tone={tone} className={cn(live && "[&>span:first-child]:animate-pulse")} dot>
       {label}
-    </span>
+    </Badge>
   );
 }

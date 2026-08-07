@@ -1,5 +1,6 @@
 import { useContextMenuStore, type MenuItem } from "@/stores/contextMenuStore";
 import { useMenuPlacement, MENU_ROOT_ATTR } from "@/hooks/useContextMenu";
+import { cn } from "@/lib/cn";
 
 function Item({ item, onDone }: { item: MenuItem; onDone: () => void }) {
   const { label, icon: Icon, disabled, danger } = item;
@@ -11,22 +12,30 @@ function Item({ item, onDone }: { item: MenuItem; onDone: () => void }) {
         onDone();
         item.onSelect();
       }}
-      className={`flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px] transition-colors focus:outline-none disabled:pointer-events-none disabled:opacity-40 ${
+      className={cn(
+        "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-base",
+        "transition-colors duration-100 focus:outline-none",
+        "disabled:pointer-events-none disabled:opacity-40",
         danger
-          ? "text-error hover:bg-error/10 focus-visible:bg-error/10"
-          : "text-on-surface hover:bg-surface-container-high focus-visible:bg-surface-container-high"
-      }`}
+          ? "text-danger-ink hover:bg-danger-soft focus-visible:bg-danger-soft"
+          : "text-ink hover:bg-hover focus-visible:bg-hover",
+      )}
     >
       {Icon ? (
-        <Icon className="size-3.5 shrink-0" strokeWidth={1.5} />
+        <Icon className="size-4 shrink-0 opacity-70" strokeWidth={1.75} />
       ) : (
-        <span className="size-3.5 shrink-0" />
+        <span className="size-4 shrink-0" />
       )}
       <span className="truncate">{label}</span>
     </button>
   );
 }
 
+/**
+ * Right-click menu. A floating sheet in the same material as every other
+ * elevated surface — same radius family, same hairline, same shadow — so it
+ * reads as part of the app rather than as OS chrome bolted on.
+ */
 export function ContextMenu() {
   const { open, x, y, entries, hide } = useContextMenuStore();
   const { ref, placement } = useMenuPlacement(x, y, entries.length);
@@ -38,7 +47,11 @@ export function ContextMenu() {
     // handle right-click — the window listener sees through it (via
     // MENU_ROOT_ATTR) and reopens with the entries for whatever is underneath,
     // so a second right-click on a card keeps that card's menu.
-    <div {...{ [MENU_ROOT_ATTR]: "" }} className="fixed inset-0 z-[60]" onClick={hide}>
+    <div
+      {...{ [MENU_ROOT_ATTR]: "" }}
+      className="fixed inset-0 z-[var(--z-menu)]"
+      onClick={hide}
+    >
       <div
         ref={ref}
         role="menu"
@@ -49,11 +62,11 @@ export function ContextMenu() {
           top: placement?.top ?? y,
           visibility: placement ? "visible" : "hidden",
         }}
-        className="fixed min-w-52 overflow-hidden rounded-md border border-outline-variant bg-surface-container-low py-1 shadow-lg fade-in"
+        className="fixed min-w-56 animate-rise rounded-xl border border-line bg-panel p-1.5 shadow-pop"
       >
         {entries.map((entry, i) =>
           entry === "separator" ? (
-            <div key={i} className="my-1 h-px bg-outline-variant" role="separator" />
+            <div key={i} className="mx-1 my-1.5 h-px bg-line" role="separator" />
           ) : (
             <Item key={i} item={entry} onDone={hide} />
           ),

@@ -16,7 +16,9 @@ export function useTheme() {
     const apply = () => {
       const dark = theme === "dark" || (theme === "system" && mq.matches);
       root.dataset.theme = dark ? "dark" : "light";
-      root.style.backgroundColor = dark ? "#12140f" : "#fcf9f4";
+      // Mirrors --color-app so the native window edge matches the app before
+      // and during paint. Keep in sync with index.css and the pre-paint script.
+      root.style.backgroundColor = dark ? "oklch(0.172 0.006 152)" : "oklch(0.949 0.004 152)";
     };
     localStorage.setItem("fluss-theme", theme);
     apply();

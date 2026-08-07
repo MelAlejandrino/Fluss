@@ -1,4 +1,7 @@
 import { Plus, X } from "lucide-react";
+import { Input } from "@/components/ui/Input";
+import { IconButton } from "@/components/ui/IconButton";
+import { Button } from "@/components/ui/Button";
 
 interface BulkUrlListProps {
   urls: string[];
@@ -7,45 +10,55 @@ interface BulkUrlListProps {
   onRemove: (index: number) => void;
 }
 
+/**
+ * A stack of URL fields, numbered so a long list stays countable against
+ * whatever it was pasted from.
+ *
+ * The list scrolls instead of growing: left to expand, twenty links would push
+ * the options and the Download button off the bottom of the window, and the
+ * whole point of bulk mode is setting options once for all of them.
+ */
 export function BulkUrlList({ urls, onChange, onAdd, onRemove }: BulkUrlListProps) {
   return (
     <div className="flex min-h-0 flex-col gap-3">
-      {/* Scrolls instead of growing — a long list would otherwise push the
-          options and the Download button off-screen. */}
-      <div className="-mr-1 flex max-h-[46vh] min-h-0 flex-col gap-2 overflow-y-auto pr-1">
+      {/* The negative margins cancel the padding, so nothing moves — the padding
+          exists purely to give focus decoration somewhere to land. Focus rings
+          are box-shadows and outlines: they paint *outside* the border box and
+          get sheared off by this container's own overflow clipping. Without the
+          vertical pair the first row's ring is cut along the top edge and the
+          last row's along the bottom. */}
+      <div className="-my-1.5 -mr-2 flex max-h-[42vh] min-h-0 flex-col gap-2 overflow-y-auto py-1.5 pr-2">
         {urls.map((url, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <span className="w-4 shrink-0 text-right font-mono text-xs text-on-surface-variant/60">
+          <div key={i} className="flex items-center gap-2.5">
+            <span className="w-5 shrink-0 text-right font-mono text-xs tabular-nums text-ink-3">
               {i + 1}
             </span>
-            <input
-              type="text"
+            <Input
+              mono
               value={url}
               onChange={(e) => onChange(i, e.target.value)}
               placeholder={`Video URL ${i + 1}…`}
-              className="min-w-0 flex-1 rounded border border-outline-variant bg-surface-container-low px-3 py-2 font-mono text-sm text-on-surface placeholder:text-on-surface-variant/60 focus:border-primary focus:outline-2 focus:-outline-offset-2 focus:outline-primary"
+              aria-label={`Video URL ${i + 1}`}
+              spellCheck={false}
+              autoComplete="off"
+              wrapperClassName="flex-1"
             />
-            <button
-              type="button"
-              onClick={() => onRemove(i)}
+            <IconButton
+              label={`Remove link ${i + 1}`}
+              tone="danger"
               disabled={urls.length === 1}
-              aria-label={`Remove link ${i + 1}`}
-              className="flex shrink-0 items-center justify-center self-stretch rounded border border-outline-variant px-2 text-on-surface-variant transition-colors hover:border-error hover:text-error disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:border-outline-variant disabled:hover:text-on-surface-variant"
+              onClick={() => onRemove(i)}
             >
-              <X className="size-4" strokeWidth={1.5} />
-            </button>
+              <X strokeWidth={1.75} />
+            </IconButton>
           </div>
         ))}
       </div>
 
-      <button
-        type="button"
-        onClick={onAdd}
-        className="inline-flex w-fit items-center gap-2 rounded border border-outline-variant px-3 py-2 text-xs text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
-      >
-        <Plus className="size-4" strokeWidth={1.5} />
+      <Button variant="ghost" size="sm" onClick={onAdd} className="w-fit">
+        <Plus />
         Add link
-      </button>
+      </Button>
     </div>
   );
 }

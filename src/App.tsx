@@ -58,7 +58,7 @@ function App() {
     : () => requestInterrupt("quit");
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col bg-app text-ink">
       <TitleBar onClose={handleClose} />
       <div className="min-h-0 flex-1">
         <AppShell>
@@ -69,7 +69,9 @@ function App() {
               initial="hidden"
               animate="show"
               exit="exit"
-              className="h-full"
+              // Flex column at full sheet height so a page can stretch its own
+              // content box (Home centres its idle state against it).
+              className="flex min-h-full flex-col"
             >
               <Page />
             </motion.div>
@@ -79,13 +81,15 @@ function App() {
       <Toaster />
       <ContextMenu />
       <ResizeHandles />
-      {pendingInterrupt && (
-        <ActiveDownloadsDialog
-          action={pendingInterrupt}
-          onClose={() => setPendingInterrupt(null)}
-          onConfirm={() => performInterrupt(pendingInterrupt)}
-        />
-      )}
+      <AnimatePresence>
+        {pendingInterrupt && (
+          <ActiveDownloadsDialog
+            action={pendingInterrupt}
+            onClose={() => setPendingInterrupt(null)}
+            onConfirm={() => performInterrupt(pendingInterrupt)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -31,6 +31,23 @@ export function formatEta(seconds?: number): string {
   return `~${m}m remaining`;
 }
 
+/**
+ * The site a link came from, as a bare host ("vimeo.com").
+ *
+ * Shown in the preview so it's obvious *what* Fluss resolved — a shortened or
+ * redirected URL often lands somewhere other than where it was copied from.
+ * Falls back to an empty string rather than throwing on anything unparseable;
+ * the caller simply renders nothing.
+ */
+export function formatHost(url?: string): string {
+  if (!url) return "";
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
 export function formatDate(iso?: string): string {
   if (!iso) return "—";
   const d = new Date(iso);

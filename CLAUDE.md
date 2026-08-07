@@ -26,6 +26,9 @@ No ESLint. `npm run build` + both test suites are the correctness gate.
 
 **`.tsx` = UI only. All logic lives in `.ts`.** No `invoke()`, `useEffect`, data fetching, validation, or business logic in `.tsx`. Full ruleset, directory layout, hook/store/API patterns, and the Rust `src-tauri` module structure are in `ARCHITECTURE.md` — read it before adding frontend or Rust code.
 
+- **Build from the primitives.** `src/components/ui/` holds the design-system layer (Button, Input, Card, Badge, SegmentedControl, Switch, Progress, Skeleton, Dialog, Tooltip, EmptyState, PageHeader, Spinner, IconButton, FlussMark). Screens compose these; they don't hand-roll a button or restate a padding scale. If a screen needs a variant a primitive doesn't have, add the variant to the primitive.
+- **Never hardcode a design value.** Colours, radii, type sizes, shadows and easings are tokens in `src/index.css` (`bg-card`, `text-ink-2`, `rounded-xl`, `shadow-pop`, `ease-out-quart`…). A raw hex, px radius, or arbitrary duration in a component is a bug. `DESIGN.md` is the reference.
+
 - All Tauri `invoke()` calls go through the single `src/lib/api.ts` wrapper. Never `import { invoke }` anywhere else.
 - Never show raw yt-dlp/OS output as a primary error message. Run it through `friendlyError()` in `src/lib/errors.ts`; the raw text goes in `errorDetails()` behind a "View details" disclosure.
 - Global state: Zustand stores in `src/stores/`. Real-time download progress comes via Tauri **events** (subscribe in hooks), not polling.

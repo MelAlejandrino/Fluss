@@ -1,113 +1,318 @@
 @import "tailwindcss";
 
-/* Design tokens from DESIGN.md. ponytail: core set the app uses now;
-   add tertiary/fixed variants when a component first needs them. */
+/* ═══════════════════════════════════════════════════════════════════════════
+   FLUSS DESIGN TOKENS
+   Single source of truth. Every value the UI uses lives here; components only
+   ever reference token-derived utilities (bg-card, text-ink-2, rounded-xl…).
+   Full rationale in DESIGN.md.
+
+   Colour model is OKLCH throughout so the neutral ramp stays perceptually even
+   and the accent keeps the same apparent weight in both themes.
+   Light theme is the @theme default; dark overrides the same custom properties
+   at runtime under :root[data-theme="dark"].
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 @theme {
-  --color-surface: #fcf9f4;
-  --color-surface-dim: #dcdad5;
-  --color-surface-container-lowest: #ffffff;
-  --color-surface-container-low: #f6f3ee;
-  --color-surface-container: #f0ede9;
-  --color-surface-container-high: #ebe8e3;
-  --color-surface-container-highest: #e5e2dd;
+  /* ── Surfaces ──────────────────────────────────────────────────────────
+     Four layers, named by role rather than by lightness, because the stack
+     inverts between themes: light elevates by getting brighter, dark by
+     getting lighter-than-the-window. Roles stay stable either way. */
+  --color-app: oklch(0.949 0.004 152); /* window background — the frame */
+  --color-panel: oklch(0.995 0.002 152); /* the floating content sheet */
+  --color-card: oklch(0.974 0.003 152); /* widgets sitting on the sheet */
+  --color-inset: oklch(0.958 0.004 152); /* inputs, wells, tracks, thumbs */
 
-  --color-on-surface: #1c1c19;
-  --color-on-surface-variant: #434843;
-  --color-inverse-surface: #31302d;
-  --color-inverse-on-surface: #f3f0eb;
+  /* ── Interaction washes ────────────────────────────────────────────────
+     Translucent so they compose over any surface without a second variant. */
+  --color-hover: oklch(0.22 0.012 152 / 0.045);
+  --color-pressed: oklch(0.22 0.012 152 / 0.085);
 
-  --color-outline: #737873;
-  --color-outline-variant: #c3c8c1;
+  /* ── Hairlines ─────────────────────────────────────────────────────────
+     Separation is mostly spacing and layering; these are for the few places
+     an edge genuinely needs to read. */
+  --color-line: oklch(0.22 0.012 152 / 0.09);
+  --color-line-strong: oklch(0.22 0.012 152 / 0.17);
 
-  --color-primary: #455548;
-  --color-on-primary: #ffffff;
-  --color-primary-container: #d5e7d6;
-  --color-on-primary-container: #101f14;
+  /* ── Text ──────────────────────────────────────────────────────────────
+     Three steps, all verified ≥4.5:1 on card (the least contrasty surface a
+     given step is allowed to land on). ink-3 is the floor, not a licence to
+     go lighter. */
+  --color-ink: oklch(0.22 0.012 152);
+  --color-ink-2: oklch(0.4 0.01 152);
+  --color-ink-3: oklch(0.47 0.009 152);
 
-  --color-error: #ba1a1a;
-  --color-on-error: #ffffff;
+  /* ── Accent — the signal ───────────────────────────────────────────────
+     Fluss means "river". The accent is inherited from the mark and used for
+     exactly one job: telling you, at a glance from across the desk, that
+     something is flowing or finished. It is never chrome, never decoration,
+     and never the fill under text — which is why there is no `on-accent`. */
+  --color-accent: oklch(0.58 0.145 152); /* fills: bars, dots, indicators */
+  --color-accent-ink: oklch(0.455 0.115 152); /* accent as readable text */
+  --color-accent-soft: oklch(0.58 0.145 152 / 0.13); /* selected / success wash */
 
-  /* Bundled via @fontsource-variable (imported in main.tsx). */
-  --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
+  /* ── Status ────────────────────────────────────────────────────────────
+     Same three-part shape as the accent: fill, readable text, soft wash. */
+  --color-danger: oklch(0.575 0.2 25);
+  --color-danger-ink: oklch(0.475 0.18 25);
+  --color-danger-soft: oklch(0.575 0.2 25 / 0.12);
+  /* Darker than `danger` so on-danger text clears 4.5:1 as a button fill. */
+  --color-danger-solid: oklch(0.46 0.18 25);
+  --color-danger-solid-hover: oklch(0.4 0.17 25);
+  --color-on-danger: oklch(0.99 0.005 25);
+
+  --color-warn: oklch(0.72 0.14 68);
+  --color-warn-ink: oklch(0.5 0.12 68);
+  --color-warn-soft: oklch(0.72 0.14 68 / 0.15);
+
+  /* ── Solid ─────────────────────────────────────────────────────────────
+     The primary-action fill: ink, not accent. Keeping green purely for state
+     means a filled button never competes with a progress bar for attention. */
+  --color-solid: oklch(0.24 0.012 152);
+  --color-solid-hover: oklch(0.32 0.012 152);
+  --color-on-solid: oklch(0.985 0.002 152);
+
+  /* Modal scrim. Explicit rather than `ink at 40%` because ink inverts between
+     themes and a near-white scrim would bleach the window in dark mode. */
+  --color-scrim: oklch(0.22 0.012 152 / 0.4);
+
+  /* ── Type ──────────────────────────────────────────────────────────────
+     One family carries the whole interface. Mono is functional only: URLs,
+     paths, byte counts, timings — data that must not reflow as it updates.
+     Bundled via @fontsource-variable (imported in main.tsx). */
   --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, "Cascadia Code", monospace;
 
-  /* Sharp, structural radii per DESIGN.md. */
-  --radius-sm: 0.125rem;
-  --radius: 0.25rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
+  /* Fixed rem scale, ~1.15 through the dense band and a wider jump at the top.
+     Product UI is viewed at a consistent DPI; nothing here is fluid. */
+  --text-2xs: 0.6875rem; /* 11px — badges, dense metadata */
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem; /* 12px — captions, stat rows */
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.8125rem; /* 13px — dense UI, table rows */
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem; /* 14px — body and every control */
+  --text-base--line-height: 1.375rem;
+  --text-md: 1rem; /* 16px — card titles */
+  --text-md--line-height: 1.5rem;
+  --text-lg: 1.125rem; /* 18px — section titles */
+  --text-lg--line-height: 1.625rem;
+  --text-xl: 1.375rem; /* 22px — dialog titles */
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 2rem; /* 32px — page titles */
+  --text-2xl--line-height: 2.375rem;
+
+  /* ── Radii ─────────────────────────────────────────────────────────────
+     Hierarchy is the point: the bigger the container, the rounder it is, so
+     nesting reads as depth. Values are tuned to the real heights they wrap —
+     a 40px control at 16px radius is a lozenge, so controls stop at 12. */
+  --radius-xs: 0.375rem; /* 6px  — progress tracks, tiny chips */
+  --radius-sm: 0.5rem; /* 8px  — nested elements, thumbnails */
+  --radius-md: 0.625rem; /* 10px — icon buttons, compact controls */
+  --radius-lg: 0.75rem; /* 12px — buttons, inputs */
+  --radius-xl: 1rem; /* 16px — cards, widgets */
+  --radius-2xl: 1.25rem; /* 20px — dialogs, list containers */
+  --radius-3xl: 1.5rem; /* 24px — the app content sheet */
+
+  /* ── Depth ─────────────────────────────────────────────────────────────
+     Two layers each, both nearly invisible on their own. Elevation comes from
+     the surface ramp; these only stop a floating thing from sitting flat. */
+  --shadow-card: 0 1px 2px oklch(0.22 0.012 152 / 0.04);
+  --shadow-panel:
+    0 1px 2px oklch(0.22 0.012 152 / 0.04), 0 12px 32px -16px oklch(0.22 0.012 152 / 0.1);
+  --shadow-pop:
+    0 2px 6px oklch(0.22 0.012 152 / 0.06), 0 16px 40px -12px oklch(0.22 0.012 152 / 0.18);
+  --shadow-modal:
+    0 4px 12px oklch(0.22 0.012 152 / 0.08), 0 32px 64px -24px oklch(0.22 0.012 152 / 0.28);
+
+  /* ── Motion ────────────────────────────────────────────────────────────
+     Exponential ease-out only. No bounce, no elastic — this is a tool, and
+     overshoot reads as latency. Durations sit in the 120–260ms band so the
+     interface never makes anyone wait for choreography. */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --animate-indeterminate: fluss-sweep 1.15s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  --animate-shimmer: fluss-shimmer 1.8s linear infinite;
+  --animate-rise: fluss-rise 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* Dark theme — overrides the @theme vars at runtime (Tailwind v4 utilities
-   reference these vars, so this re-skins the whole app). Derived from the M3
-   green scheme's dark counterpart + DESIGN's inverse tokens. */
+/* ── Dark theme ──────────────────────────────────────────────────────────
+   Never pure black: the window sits at L 0.172, dark enough to recede beside a
+   browser at night, light enough that the panel above it still reads as lifted.
+   The same green tint (chroma 0.006) runs through the ramp so neutrals belong
+   to the brand rather than defaulting to a colourless grey. */
 :root[data-theme="dark"] {
-  --color-surface: #12140f;
-  --color-surface-dim: #12140f;
-  --color-surface-container-lowest: #0d0f0a;
-  --color-surface-container-low: #1a1c17;
-  --color-surface-container: #1e201b;
-  --color-surface-container-high: #292b25;
-  --color-surface-container-highest: #343630;
+  --color-app: oklch(0.172 0.006 152);
+  --color-panel: oklch(0.212 0.007 152);
+  --color-card: oklch(0.253 0.008 152);
+  --color-inset: oklch(0.185 0.006 152);
 
-  --color-on-surface: #e2e3dc;
-  --color-on-surface-variant: #c3c8bd;
-  --color-inverse-surface: #e2e3dc;
-  --color-inverse-on-surface: #2e312b;
+  --color-hover: oklch(1 0 0 / 0.055);
+  --color-pressed: oklch(1 0 0 / 0.1);
 
-  --color-outline: #8d9387;
-  --color-outline-variant: #424940;
+  --color-line: oklch(1 0 0 / 0.075);
+  --color-line-strong: oklch(1 0 0 / 0.145);
 
-  --color-primary: #b9cbbb;
-  --color-on-primary: #243528;
-  --color-primary-container: #3b4b3e;
-  --color-on-primary-container: #d5e7d6;
+  --color-ink: oklch(0.955 0.004 152);
+  --color-ink-2: oklch(0.8 0.008 152);
+  --color-ink-3: oklch(0.685 0.01 152);
 
-  --color-error: #ffb4ab;
-  --color-on-error: #690005;
+  --color-accent: oklch(0.78 0.155 152);
+  --color-accent-ink: oklch(0.82 0.145 152);
+  --color-accent-soft: oklch(0.78 0.155 152 / 0.16);
+
+  --color-danger: oklch(0.7 0.175 22);
+  --color-danger-ink: oklch(0.755 0.16 22);
+  --color-danger-soft: oklch(0.7 0.175 22 / 0.16);
+  /* Inverted in dark: a bright fill carrying dark text, same as `solid`.
+     Chroma is pulled back from the `danger` ramp — at full saturation this is
+     the one control in the app that reads as candy. */
+  --color-danger-solid: oklch(0.68 0.155 22);
+  --color-danger-solid-hover: oklch(0.74 0.15 22);
+  --color-on-danger: oklch(0.18 0.03 22);
+
+  --color-warn: oklch(0.8 0.135 72);
+  --color-warn-ink: oklch(0.845 0.13 72);
+  --color-warn-soft: oklch(0.8 0.135 72 / 0.16);
+
+  --color-solid: oklch(0.955 0.004 152);
+  --color-solid-hover: oklch(0.88 0.006 152);
+  --color-on-solid: oklch(0.185 0.008 152);
+
+  --color-scrim: oklch(0.09 0.004 152 / 0.62);
+
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.32);
+  --shadow-panel: 0 1px 2px oklch(0 0 0 / 0.34), 0 12px 32px -16px oklch(0 0 0 / 0.5);
+  --shadow-pop: 0 2px 6px oklch(0 0 0 / 0.4), 0 16px 40px -12px oklch(0 0 0 / 0.6);
+  --shadow-modal: 0 4px 12px oklch(0 0 0 / 0.45), 0 32px 64px -24px oklch(0 0 0 / 0.7);
 }
 
-html,
-body,
-#root {
-  height: 100%;
+/* ── Stacking order ──────────────────────────────────────────────────────
+   Semantic, never arbitrary. Referenced as z-[var(--z-modal)]. */
+:root {
+  --z-dropdown: 20;
+  --z-sticky: 30;
+  --z-resize: 35;
+  --z-scrim: 40;
+  --z-modal: 50;
+  --z-menu: 60;
+  --z-toast: 70;
+  --z-tooltip: 80;
 }
 
-body {
-  margin: 0;
-  background: var(--color-surface);
-  color: var(--color-on-surface);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
+/* ═══════════════════════════════════════════════════════════════════════════
+   BASE
+   Inside @layer base so utilities still win — an unlayered rule here would
+   outrank every Tailwind class, and `outline-none` on a nested input could
+   never turn the global focus ring off.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-app);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    /* Desktop chrome doesn't select. Copyable content opts back in below —
+       dragging across a card and highlighting half the UI is a web tell. */
+    user-select: none;
+    cursor: default;
+  }
+
+  input,
+  textarea,
+  pre,
+  code,
+  [data-selectable] {
+    user-select: text;
+  }
+
+  /* One focus treatment for the entire app: a 2px accent ring, offset so it
+     never touches the component's own edge. Outline follows border-radius.
+     Composite controls (the URL field, segmented groups) opt their inner
+     element out and show focus on the shell instead, so there is only ever
+     one ring on screen. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--color-accent-soft);
+    color: var(--color-ink);
+  }
 }
 
-/* Subtle scrollbar: transparent track (so a reserved-but-unused scrollbar is
-   invisible), thin themed thumb only when content overflows. */
+/* Thin, self-effacing scrollbar. The track is transparent so a reserved-but-
+   unused gutter is invisible and navigation never shifts layout.
+   `scrollbar-gutter` is applied per-container (see AppShell), never globally —
+   `overflow: hidden` boxes are scroll containers too and would each reserve a
+   dead 12px strip. */
 ::-webkit-scrollbar {
   width: 12px;
   height: 12px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: var(--color-outline-variant);
-  border: 3px solid transparent;
+  background: var(--color-line-strong);
+  border: 4px solid transparent;
   background-clip: content-box;
   border-radius: 9999px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-outline);
+  background: var(--color-ink-3);
   background-clip: content-box;
 }
 
-/* Calm entrance motion. ponytail: CSS keyframe instead of a motion lib;
-   swap for Framer Motion only if page transitions need orchestration. */
-@keyframes fluss-fade-in {
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   KEYFRAMES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Indeterminate progress: one segment sweeping the track. */
+@keyframes fluss-sweep {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(420%);
+  }
+}
+
+/* Skeleton: a highlight travelling across the placeholder, not a pulse —
+   pulsing blocks read as "broken", travelling ones read as "loading". */
+@keyframes fluss-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Popovers and menus: a short rise, no scale — scaling text blurs it mid-flight. */
+@keyframes fluss-rise {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -115,29 +320,46 @@ body {
   }
 }
 
-.fade-in {
-  animation: fluss-fade-in 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+/* Base is an ink wash rather than a surface token, so a placeholder keeps the
+   same weight whether it lands on the sheet, a card, or a well — `inset` on a
+   dark card read as a hole punched in it, not as content arriving. */
+.skeleton {
+  background-color: color-mix(in oklab, var(--color-ink) 9%, transparent);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--color-ink) 7%, transparent) 45%,
+    transparent 90%
+  );
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
 }
 
-/* Indeterminate progress: a segment sweeping across the track. */
-@keyframes fluss-indeterminate {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(400%);
-  }
-}
-
-.indeterminate-bar {
-  animation: fluss-indeterminate 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
+/* ═══════════════════════════════════════════════════════════════════════════
+   REDUCED MOTION
+   Every animation has a still alternative — nothing is gated on a transition,
+   so suppressing motion never hides content.
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 @media (prefers-reduced-motion: reduce) {
-  .fade-in {
-    animation: none;
-  }
-  * {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* These two communicate "still working" — they'd read as frozen if stilled,
+     so they keep moving, just slowly and without travel. */
+  .skeleton {
+    animation: none;
+    background-image: none;
+  }
+
+  [data-indeterminate] {
+    animation: none !important;
+    width: 100% !important;
+    opacity: 0.5;
   }
 }

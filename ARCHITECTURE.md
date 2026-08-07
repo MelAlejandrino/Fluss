@@ -40,9 +40,15 @@ src/
 │   └── routes.tsx           # Route definitions
 │
 ├── components/
+│   ├── ui/                  # Design-system primitives — see DESIGN.md §9.
+│   │   ├── Button.tsx       # Everything else composes these; never
+│   │   ├── Input.tsx        # hand-roll a control in a screen.
+│   │   ├── Card.tsx
+│   │   └── …
 │   ├── app-shell/
 │   │   ├── AppShell.tsx
-│   │   └── Sidebar.tsx
+│   │   ├── Rail.tsx
+│   │   └── TitleBar.tsx
 │   ├── downloads/
 │   │   ├── DownloadCard.tsx
 │   │   ├── DownloadProgress.tsx

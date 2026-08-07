@@ -24,6 +24,21 @@ pub fn minimize_to_tray(app: &AppHandle) -> bool {
         .unwrap_or(false)
 }
 
+/// The saved theme preference: "light", "dark", or "system". Read from disk for
+/// the same reason as `minimize_to_tray` — the window needs a background colour
+/// before the frontend exists to tell it one.
+pub fn theme_preference(app: &AppHandle) -> String {
+    let Ok(path) = settings_file(app) else {
+        return "system".into();
+    };
+    let stored = store::read_json(&path, Value::Null).unwrap_or(Value::Null);
+    stored
+        .get("theme")
+        .and_then(Value::as_str)
+        .unwrap_or("system")
+        .to_string()
+}
+
 /// Stored settings blob, or Null if none saved yet (frontend applies defaults).
 #[tauri::command]
 pub fn get_settings(app: AppHandle) -> Result<Value, String> {
@@ -32,7 +47,11 @@ pub fn get_settings(app: AppHandle) -> Result<Value, String> {
 
 #[tauri::command]
 pub fn save_settings(app: AppHandle, settings: Value) -> Result<(), String> {
-    store::write_json(&settings_file(&app)?, &settings)
+    store::write_json(&settings_file(&app)?, &settings)?;
+    // The theme may have just changed. Repaint the window layer to match, or a
+    // drag-resize afterwards shows a strip of the previous theme's background.
+    crate::apply_window_background(&app);
+    Ok(())
 }
 
 /// The browser we read cookies from. Not a user choice: on Windows, Chromium

@@ -1,32 +1,43 @@
-import { X, FolderOpen, Play, RotateCcw, AlertTriangle } from "lucide-react";
+import { X, FolderOpen, Play, RotateCcw, TriangleAlert } from "lucide-react";
 import type { DownloadCardProps } from "@/types/download";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 import { DownloadStatus } from "./DownloadStatus";
 import { DownloadProgress } from "./DownloadProgress";
 import { Thumbnail } from "./Thumbnail";
 
+/**
+ * A download, at full detail. One card holds everything about a single item:
+ * what it is, where it got to, what went wrong, and what you can do next —
+ * so nothing about it is ever a click away.
+ *
+ * Actions only appear once they're possible, which keeps a queue of waiting
+ * items visually quiet and makes the finished ones obviously actionable.
+ */
 export function DownloadCard({ item, onOpen, onReveal, onCancel, onRetry }: DownloadCardProps) {
   const showProgress = item.status === "downloading" || item.status === "processing";
   const isDone = item.status === "completed";
   const canRetry = item.status === "failed" || item.status === "cancelled";
+  const hasActions = showProgress || isDone || canRetry;
 
   return (
-    <div
-      data-menu="download"
-      data-menu-id={item.id}
-      className="flex gap-5 rounded-sm border border-outline-variant bg-surface-container-low p-5 transition-colors hover:border-outline"
-    >
-      <Thumbnail src={item.thumbnailUrl} className="w-40" />
+    // `items-start` matters: a stretched flex child overrides aspect-ratio, and
+    // the card is always taller than a 16:9 thumbnail once progress and actions
+    // are in it — without this the artwork silently turns portrait.
+    <Card data-menu="download" data-menu-id={item.id} className="flex items-start gap-5">
+      <Thumbnail src={item.thumbnailUrl} className="w-40 max-sm:w-28" />
 
-      <div className="flex min-w-0 flex-1 flex-col gap-2.5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="truncate font-display text-base font-semibold leading-snug text-on-surface">
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <h3 className="truncate text-md font-semibold leading-snug tracking-[-0.01em] text-ink">
               {item.title ?? item.url}
             </h3>
-            <p className="font-mono text-[11px] uppercase tracking-widest text-on-surface-variant">
-              {item.format}
-              {item.quality ? ` · ${item.quality}` : ""}
-            </p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge mono>{item.format.toUpperCase()}</Badge>
+              {item.quality && <Badge mono>{item.quality}</Badge>}
+            </div>
           </div>
           <DownloadStatus status={item.status} />
         </div>
@@ -34,16 +45,26 @@ export function DownloadCard({ item, onOpen, onReveal, onCancel, onRetry }: Down
         {showProgress && <DownloadProgress item={item} />}
 
         {item.status === "failed" && item.error && (
-          <div className="flex items-start gap-2.5 rounded-sm border border-error/40 bg-error/10 p-3">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-error" strokeWidth={1.5} />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs text-on-surface">{item.error}</p>
+          // Recessed well, not a tinted slab: this sits *inside* a card, and a
+          // filled danger block there reads as a nested container. Same
+          // icon-plate vocabulary as ErrorState and the toasts.
+          <div className="flex items-start gap-3 rounded-lg border border-danger/20 bg-inset p-3.5">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-danger-soft text-danger-ink">
+              <TriangleAlert className="size-3.5" strokeWidth={1.75} />
+            </span>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <p className="text-sm leading-relaxed text-ink">{item.error}</p>
               {item.errorDetails && (
-                <details className="mt-1.5">
-                  <summary className="cursor-pointer select-none font-mono text-[11px] text-on-surface-variant hover:text-on-surface">
+                <details className="mt-2">
+                  <summary className="w-fit cursor-pointer select-none text-xs font-medium text-ink-3 transition-colors hover:text-ink">
                     View details
                   </summary>
-                  <pre className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-on-surface-variant">
+                  <pre
+                    data-selectable
+                    // `card`, not `inset` — the well around it is already inset,
+                    // and same-on-same would make the raw output invisible.
+                    className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-md border border-line bg-card p-2.5 font-mono text-2xs leading-relaxed text-ink-2"
+                  >
                     {item.errorDetails}
                   </pre>
                 </details>
@@ -52,47 +73,35 @@ export function DownloadCard({ item, onOpen, onReveal, onCancel, onRetry }: Down
           </div>
         )}
 
-        {(showProgress || isDone || canRetry) && (
-          <div className="mt-1 flex gap-2">
+        {hasActions && (
+          <div className="flex flex-wrap gap-2 pt-0.5">
             {isDone && (
               <>
-                <button
-                  onClick={() => onOpen(item.filePath)}
-                  className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3.5 py-2 text-xs font-medium text-on-primary hover:bg-primary/90 active:scale-[0.98]"
-                >
-                  <Play className="size-3.5" strokeWidth={1.5} />
+                <Button variant="primary" size="sm" onClick={() => onOpen(item.filePath)}>
+                  <Play />
                   Open File
-                </button>
-                <button
-                  onClick={() => (onReveal ?? onOpen)(item.filePath)}
-                  className="inline-flex items-center gap-1.5 rounded-sm border border-outline-variant px-3.5 py-2 text-xs font-medium text-on-surface hover:border-outline"
-                >
-                  <FolderOpen className="size-3.5" strokeWidth={1.5} />
+                </Button>
+                <Button size="sm" onClick={() => (onReveal ?? onOpen)(item.filePath)}>
+                  <FolderOpen />
                   Show in Folder
-                </button>
+                </Button>
               </>
             )}
             {canRetry && onRetry && (
-              <button
-                onClick={() => onRetry(item.id)}
-                className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3.5 py-2 text-xs font-medium text-on-primary hover:bg-primary/90 active:scale-[0.98]"
-              >
-                <RotateCcw className="size-3.5" strokeWidth={1.5} />
+              <Button variant="primary" size="sm" onClick={() => onRetry(item.id)}>
+                <RotateCcw />
                 Retry
-              </button>
+              </Button>
             )}
             {showProgress && onCancel && (
-              <button
-                onClick={() => onCancel(item.id)}
-                className="inline-flex items-center gap-1.5 rounded-sm border border-outline-variant px-3.5 py-2 text-xs font-medium text-on-surface hover:border-outline"
-              >
-                <X className="size-3.5" strokeWidth={1.5} />
+              <Button variant="ghost" size="sm" onClick={() => onCancel(item.id)}>
+                <X />
                 Cancel
-              </button>
+              </Button>
             )}
           </div>
         )}
       </div>
-    </div>
+    </Card>
   );
 }

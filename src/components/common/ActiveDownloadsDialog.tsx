@@ -1,5 +1,8 @@
+import { TriangleAlert } from "lucide-react";
 import { useDownloadStore } from "@/stores/downloadStore";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
+import { Dialog } from "@/components/ui/Dialog";
+import { Button } from "@/components/ui/Button";
 import type { InterruptAction } from "@/lib/interrupt";
 
 interface ActiveDownloadsDialogProps {
@@ -16,6 +19,11 @@ const COPY: Record<InterruptAction, { question: string; confirm: string }> = {
   reload: { question: "Reloading will stop them. Continue?", confirm: "Reload" },
 };
 
+/**
+ * The only modal in the app, and it exists because the alternative is losing
+ * work silently. Cancel is focused on open and sits first: the safe choice
+ * should be the one you get by pressing Enter or Escape without reading.
+ */
 export function ActiveDownloadsDialog({
   action,
   onClose,
@@ -32,40 +40,28 @@ export function ActiveDownloadsDialog({
   const { question, confirm } = COPY[action];
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="active-downloads-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm rounded-lg border border-outline-variant bg-surface-container-low p-6 shadow-lg"
-      >
-        <h2 id="active-downloads-title" className="text-lg font-semibold text-on-surface">
-          Downloads are still active
-        </h2>
-        <p className="mt-2 text-sm text-on-surface-variant">
-          There {active.length === 1 ? "is" : "are"} {active.length} active download
-          {active.length > 1 ? "s" : ""}. {question}
-        </p>
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            autoFocus
-            className="rounded px-4 py-2 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high"
-          >
+    <Dialog
+      title="Downloads are still active"
+      titleId="active-downloads-title"
+      icon={TriangleAlert}
+      tone="danger"
+      onClose={onClose}
+      footer={
+        <>
+          {/* Secondary, not ghost: in a footer of exactly two choices both need
+              to read as buttons. A ghost Cancel is bare text the moment focus
+              moves off it, which is the wrong affordance for the safe option. */}
+          <Button variant="secondary" autoFocus onClick={onClose}>
             Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            className="rounded bg-error px-4 py-2 text-sm font-medium text-on-error transition-colors hover:bg-error/90"
-          >
+          </Button>
+          <Button variant="danger" onClick={onConfirm}>
             {confirm}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </>
+      }
+    >
+      There {active.length === 1 ? "is" : "are"} {active.length} active download
+      {active.length > 1 ? "s" : ""}. {question}
+    </Dialog>
   );
 }

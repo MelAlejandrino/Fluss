@@ -1,192 +1,297 @@
----
-name: WINDRUNNER
-colors:
-  surface: '#fcf9f4'
-  surface-dim: '#dcdad5'
-  surface-bright: '#fcf9f4'
-  surface-container-lowest: '#ffffff'
-  surface-container-low: '#f6f3ee'
-  surface-container: '#f0ede9'
-  surface-container-high: '#ebe8e3'
-  surface-container-highest: '#e5e2dd'
-  on-surface: '#1c1c19'
-  on-surface-variant: '#434843'
-  inverse-surface: '#31302d'
-  inverse-on-surface: '#f3f0eb'
-  outline: '#737873'
-  outline-variant: '#c3c8c1'
-  surface-tint: '#526255'
-  primary: '#2e3e32'
-  on-primary: '#ffffff'
-  primary-container: '#455548'
-  on-primary-container: '#b7c9b8'
-  inverse-primary: '#b9cbbb'
-  secondary: '#5f5e5a'
-  on-secondary: '#ffffff'
-  secondary-container: '#e2dfda'
-  on-secondary-container: '#63635f'
-  tertiary: '#4b3437'
-  on-tertiary: '#ffffff'
-  tertiary-container: '#644a4e'
-  on-tertiary-container: '#debbc0'
-  error: '#ba1a1a'
-  on-error: '#ffffff'
-  error-container: '#ffdad6'
-  on-error-container: '#93000a'
-  primary-fixed: '#d5e7d6'
-  primary-fixed-dim: '#b9cbbb'
-  on-primary-fixed: '#101f14'
-  on-primary-fixed-variant: '#3b4b3e'
-  secondary-fixed: '#e5e2dd'
-  secondary-fixed-dim: '#c9c6c1'
-  on-secondary-fixed: '#1c1c19'
-  on-secondary-fixed-variant: '#474743'
-  tertiary-fixed: '#fedade'
-  tertiary-fixed-dim: '#e1bec2'
-  on-tertiary-fixed: '#2a161a'
-  on-tertiary-fixed-variant: '#594044'
-  background: '#fcf9f4'
-  on-background: '#1c1c19'
-  surface-variant: '#e5e2dd'
-typography:
-  display-lg:
-    fontFamily: Fraunces
-    fontSize: 48px
-    fontWeight: '600'
-    lineHeight: 56px
-    letterSpacing: -0.02em
-  display-md:
-    fontFamily: Fraunces
-    fontSize: 32px
-    fontWeight: '600'
-    lineHeight: 40px
-    letterSpacing: -0.01em
-  headline-sm:
-    fontFamily: Geist
-    fontSize: 20px
-    fontWeight: '600'
-    lineHeight: 28px
-  body-lg:
-    fontFamily: Geist
-    fontSize: 16px
-    fontWeight: '400'
-    lineHeight: 24px
-  body-md:
-    fontFamily: Geist
-    fontSize: 14px
-    fontWeight: '400'
-    lineHeight: 20px
-  label-technical:
-    fontFamily: Geist Mono
-    fontSize: 12px
-    fontWeight: '500'
-    lineHeight: 16px
-    letterSpacing: 0.02em
-  label-caps:
-    fontFamily: Geist
-    fontSize: 11px
-    fontWeight: '700'
-    lineHeight: 16px
-    letterSpacing: 0.05em
-rounded:
-  sm: 0.125rem
-  DEFAULT: 0.25rem
-  md: 0.375rem
-  lg: 0.5rem
-  xl: 0.75rem
-  full: 9999px
-spacing:
-  unit: 4px
-  gutter: 1px
-  margin-sm: 12px
-  margin-md: 24px
-  panel-padding: 16px
-  stack-gap: 8px
+# Fluss — Design System
+
+The single reference for how Fluss looks and behaves. Tokens live in
+`src/index.css`; primitives live in `src/components/ui/`. Nothing in the app
+should introduce a colour, radius, size, or duration that isn't here.
+
+`DESIGN_PATTERN.md` covers page composition and layout rules. This file covers
+the system those pages are built from.
+
 ---
 
-## Brand & Style
+## 1. The premise
 
-This design system is built for products that balance technical precision with editorial elegance. The brand personality is that of a "specialized instrument"—reliable, calm, and highly focused.
+Fluss is a **glanceable background utility**. It sits beside a browser, often
+minimised to the tray, and is checked rather than read: *is it done yet?*
 
-The aesthetic identity is defined by **Technical Minimalism** and **Subtle Brutalism**. It rejects soft shadows and decorative flourishes in favor of structural integrity, hard-edge alignment, and tonal layering. The experience should feel like working with high-end archival equipment: tactile through contrast and layout rather than physical metaphor. It suits users who value a high-density, distraction-free environment that prioritizes content and data over chrome.
+Everything below follows from that one sentence.
 
-## Colors
+- **The window recedes.** Neutral surfaces, hairline edges, no decoration
+  competing for attention.
+- **One colour carries state.** Accent green appears only where something is
+  flowing or finished. If there is green on screen, something happened.
+- **Numbers don't twitch.** Every value that updates live is mono and tabular.
+- **Motion reports, never performs.** 120–260ms, ease-out, no bounce.
 
-The palette is rooted in an "Archival Paper" base, providing a warm, low-fatigue background that distinguishes the product from typical cold-gray software.
+### What it is not
 
-- **Primary & Accent:** A Muted Forest Green (#455548) is used sparingly for primary actions, success states, and active selection markers.
-- **Surface Hierarchy:** Depth is communicated through a stepped series of parchment-toned neutrals. As elements move "closer" to the user, they transition from the background color to progressively cooler, darker neutral tones (#F6F3EE down to #E5E2DD).
-- **Typography & Borders:** Text is anchored by a near-black ink color (#1C1C19). Borders use a structural gray-green (#C3C8C1) to define the workspace without creating visual noise.
+Not a dark hacker tool with a neon accent — that's the first reflex for
+anything wrapping a CLI. Not warm cream editorial with a display serif —
+that's the second reflex, and it's what Fluss used to be. The answer here is a
+quiet, near-neutral shell tinted toward the brand's own hue, with green
+demoted from *chrome* to *signal*.
 
-## Typography
+---
 
-The typography system creates a "Technical Editorial" feel by pairing a high-contrast serif with precise, modern sans-serifs.
+## 2. Colour
 
-- **Display (Fraunces):** Reserved for high-level headers, titles, and branding moments. It adds a layer of sophisticated authority.
-- **UI (Geist):** Used for the majority of the interface, including body text and navigational elements. Its technical, clean structure ensures legibility at small sizes.
-- **Technical (Geist Mono):** Essential for any fixed-width or numeric data—IDs, timestamps, file paths, code, and metadata. The monospaced nature ensures that columns of data remain perfectly aligned, reinforcing the "specialized instrument" feel.
+OKLCH throughout, so the neutral ramp is perceptually even and the accent keeps
+the same apparent weight in both themes. Light is the `@theme` default; dark
+overrides the same custom properties under `:root[data-theme="dark"]`.
 
-## Layout & Spacing
+### Surfaces
 
-This design system utilizes a **Fixed Panel Grid** model. The interface is composed of resizable rectangular modules separated by 1px borders rather than floating, free-form content.
+Named by **role**, not by lightness — the stack inverts between themes (light
+elevates by getting brighter, dark by getting lighter-than-the-window) and
+role names survive that.
 
-- **The 4px Rule:** All internal spacing (padding, gaps) must be a multiple of 4px to maintain a rigid, calculated rhythm.
-- **Panel Logic:** Instead of floating cards, the layout relies on docked panels. Each panel has a consistent internal padding of 16px.
-- **Tight Density:** Information density should be high but organized. Use a 1px "structural border" rather than negative space to separate distinct functional zones.
+| Token | Job |
+|---|---|
+| `app` | Window background. The caption bar and rail sit directly on it. |
+| `panel` | The floating content sheet. The only raised plane in the shell. |
+| `card` | Widgets on the sheet. |
+| `inset` | Recessed: inputs, wells, tracks, thumbnail frames. |
 
-## Elevation & Depth
+Depth comes from this ramp plus a gap, not from shadows. There are exactly two
+planes in the shell: the window frame and the sheet.
 
-In this design system, depth is purely structural and tonal. **Shadows are strictly prohibited.**
+### Interaction washes
 
-1.  **Tonal Layering:** The primary method of showing hierarchy. A "Level 1" surface sits on the background; a "Level 2" surface appears as an inset or an overlay.
-2.  **Thin Outlines:** All interactive elements and panels are defined by a 1px solid border (#C3C8C1).
-3.  **Active States:** Selection is indicated by a shift to the Primary Accent color or a 2px interior stroke, never by a lift or drop shadow.
-4.  **Glass Effects:** Modals may use a very subtle backdrop blur, but the container itself must remain opaque and bordered to maintain the "Subtle Brutalist" aesthetic.
+`hover` and `pressed` are **translucent** so they compose over any surface
+without needing a second variant per layer.
 
-## Shapes
+### Text
 
-The shape language is disciplined and sharp.
+Three steps. Every one is verified ≥4.5:1 against `card`, the least contrasty
+surface it is allowed to land on.
 
-- **Radius:** A universal 4px radius is applied to buttons, input fields, and small containers. This provides just enough softness to feel modern while maintaining the rigid, "instrument" aesthetic.
-- **Hard Edges:** Large layout panels and the main application window should have 0px or 2px radii to emphasize the structural grid.
-- **Consistency:** Avoid pill-shaped buttons; all interactive targets should be rectangular with the standard 4px corner.
+| Token | Job | Light | Dark |
+|---|---|---|---|
+| `ink` | Titles, values, anything you read first | L 0.22 | L 0.955 |
+| `ink-2` | Secondary body, labels | L 0.40 | L 0.80 |
+| `ink-3` | Metadata, hints, placeholders, resting icons | L 0.47 | L 0.685 |
 
-## Iconography
+`ink-3` is the **floor**, not a licence to go lighter. Placeholder text uses it
+too — placeholders are content, and the usual "muted grey" placeholder fails
+contrast everywhere.
 
-- Icons should be 1px stroke weight, geometric, and non-rounded, matching the structural line weight of borders.
-- Prefer outline icons over filled; reserve fills for active/selected states, mirroring the accent-color logic.
-- Keep icons on a consistent square grid so they align with the 4px spacing rhythm.
+### Accent — the signal
 
-## Components
+Green, inherited from the mark. Used for exactly four things:
 
-### Buttons
-- **Primary:** Solid #455548 background, #FCF9F4 text, 4px radius. No gradient.
-- **Secondary:** Transparent background, 1px border (#C3C8C1), #1C1C19 text.
-- **Ghost:** No border or background unless hovered; uses Geist Mono for a more technical feel in utility/toolbars.
+1. Progress fill
+2. Status dots and success
+3. Selection (the tinted icon on the active nav row, the focus ring)
+4. Accent text (`accent-ink`)
 
-### Input Fields
-- **Text Inputs:** #F6F3EE background, 1px border. On focus, the border thickens to 2px #455548. Use Geist Mono for technical or numeric data inputs.
-- **Checkboxes:** Square with 2px radius. When checked, uses a solid #455548 fill with a white checkmark.
+**Never a text-bearing fill.** There is deliberately no `on-accent` token —
+if you're about to put a label on a green rectangle, you want `solid` instead.
+That rule is what keeps the palette Restrained: a running download is the
+greenest thing on screen, always.
 
-### Data Tables & Lists
-- Use Geist Mono for all values, IDs, and numeric fields so columns stay aligned.
-- Use `label-caps` for column headers and section labels.
-- Alternating row stripes (zebra striping) using Surface Level 1 and Background for high-density data legibility.
+### Solid
 
-### Cards & Panels
-- Panels are never floating. They are "docked" units with 1px #C3C8C1 borders.
-- Header bars for panels use Surface Level 2 (#F0EDE8) to differentiate from the content area.
+`solid` / `on-solid` is the primary-action fill: **ink, not accent**. Near-black
+in light, near-white in dark. A filled button therefore never competes with a
+progress bar, and the CTA reads as the most committed thing on the page without
+using colour to do it.
 
-### Numeric & Status Readouts
-- Any live value, counter, coordinate, or status display uses Geist Mono at `body-md` size, housed in a Surface Level 2 container.
-- Keep readouts fixed-width where possible so values don't shift the layout as they update.
+### Status
 
-## Applying the System to Domain-Specific UI
+Each has the same three-part shape: `-` (fill), `-ink` (readable text),
+`-soft` (wash).
 
-When a project introduces components not covered above (specialized controls, viewers, editors, dashboards, or any bespoke widget), derive them from the same principles rather than inventing new visual language:
+- **accent** — success doubles as the accent; a finished download is the same green as a running one
+- **warn** — required-but-not-yet-wrong (e.g. no folder chosen)
+- **danger** — failed, destructive. Plus `danger-solid` / `on-danger` for the one destructive button; it's darker than `danger` in light mode so the label clears 4.5:1.
 
-- **Structure over decoration:** define regions with 1px #C3C8C1 borders and tonal surface steps, never shadows or floating cards.
-- **Mono for machine data:** any technical, numeric, or fixed-format value uses Geist Mono; prose and labels use Geist; only headline moments use Fraunces.
-- **Accent sparingly:** #455548 marks the primary action, active selection, or success—nothing else competes for it.
-- **4px rhythm:** every offset, gap, and padding value resolves to a multiple of 4px.
-- **Sharp, tactile controls:** 1px geometric icons, rectangular targets, 4px radius, and state changes expressed through color and stroke weight rather than motion or elevation.
+Status is **never carried by colour alone** — every chip has a word.
+
+### One error surface
+
+Anything reporting a problem — the inline analyse error, a failed download's
+block, an error toast, the destructive dialog — uses the same shape:
+
+> **neutral surface + a small tinted icon plate + a hairline in the status hue.**
+
+Not a filled `-soft` block. A `danger-soft` wash over a 600px-wide region makes
+a field of pink the loudest thing on a page whose whole palette is otherwise
+restrained, and it produced two different-looking errors in one app. The tint
+belongs in the 24–28px plate, where it marks the message without flooding it.
+
+The one exception is a control whose *own state* is the message — an unset
+download folder — where the field itself carries a `warn` wash because there
+is nothing else to tint.
+
+---
+
+## 3. Typography
+
+**One family.** Geist carries headings, buttons, labels, body, and data. The
+old display serif is gone: a display face in UI labels is a product-design
+anti-pattern, and product UI doesn't need a pairing.
+
+**Geist Mono is functional only** — URLs, file paths, byte counts, speeds,
+versions, counts. Things that are data, or that must not reflow as they update.
+Pair `font-mono` with `tabular-nums` for anything live.
+
+Fixed rem scale, ~1.15 through the dense band and a wider jump at the top.
+Nothing is fluid: users view at a consistent DPI, and a clamp-sized heading that
+shrinks inside a panel looks worse, not better.
+
+| Token | px | Used for |
+|---|---|---|
+| `text-2xs` | 11 | Badges, dense metadata, `kbd` |
+| `text-xs` | 12 | Captions, stat rows, hints |
+| `text-sm` | 13 | Dense UI, field labels, table rows |
+| `text-base` | 14 | Body and every control — the default |
+| `text-md` | 16 | Card and section titles |
+| `text-lg` | 18 | Preview titles |
+| `text-xl` | 22 | Dialog titles |
+| `text-2xl` | 32 | Page titles (h1) |
+
+Weights: **400** body, **500** labels and controls, **600** titles. Nothing
+heavier. Emphasis is weight, not size.
+
+Tracking tightens as size grows: `-0.022em` on page titles, `-0.015em` at 18–22,
+`-0.01em` at 16, none below.
+
+### Banned
+
+Tiny uppercase letter-spaced eyebrows (`text-[11px] font-bold uppercase
+tracking-widest`). It was on every label in the old UI. At 11px with wide
+tracking it is the least legible text on screen, and it reads as decoration
+rather than as a label. Field labels are 13px medium sentence-case.
+
+---
+
+## 4. Shape
+
+Radius hierarchy is load-bearing: the bigger the container, the rounder it is,
+so nesting reads as depth. Values are tuned to the heights they actually wrap —
+a 40px control at 16px radius is a lozenge, so controls stop at 12.
+
+| Token | px | Used for |
+|---|---|---|
+| `rounded-xs` | 6 | Progress tracks, tiny chips |
+| `rounded-sm` | 8 | Nested elements, skeleton bars |
+| `rounded-md` | 10 | Icon buttons, compact controls, menu items |
+| `rounded-lg` | 12 | Buttons, inputs, thumbnails, wells |
+| `rounded-xl` | 16 | Cards, widgets, list containers |
+| `rounded-2xl` | 20 | Dialogs, empty states |
+| `rounded-3xl` | 24 | The content sheet |
+| `rounded-full` | — | Badges, switches, progress fills, dots |
+
+**Cards never nest.** Content inside a card that needs its own container gets a
+`Well` (`bg-inset`), which reads as recessed rather than as another card.
+
+---
+
+## 5. Depth and edges
+
+Shadows are two-layer and nearly invisible. They exist to stop a floating thing
+sitting flat, not to make it hover.
+
+`shadow-card` → `shadow-panel` → `shadow-pop` (menus, toasts) → `shadow-modal`.
+
+Borders are 1px `line` (~9% ink) with `line-strong` (~17%) for hover and
+dividers. Most separation is spacing; a border is a last resort.
+
+---
+
+## 6. Spacing
+
+8px rhythm with 4px half-steps. In practice: `2 3 4 5 6 8 10 12 16` on
+Tailwind's 4px scale.
+
+- Page padding: `px-10 py-12`
+- Card padding: `p-5`
+- Gap between cards: `5` (20px)
+- Gap between page sections: `10` (40px)
+- Control gaps: `2`–`3`
+
+---
+
+## 7. Motion
+
+Tokens in `src/lib/motion.ts` mirror the easings in `index.css`.
+
+- **Curve**: `cubic-bezier(0.16, 1, 0.3, 1)` (ease-out-expo). No bounce, no elastic — overshoot in a tool reads as lag.
+- **Durations**: fast 120ms, base 180ms, slow 260ms.
+- **Selection indicators** (nav pill, segmented control) use a shared `layoutId` and a stiff spring, so the change reads as one element moving rather than two repaints.
+- **Press**: `active:scale-[0.98]` on buttons, `0.95` on icon buttons.
+- **Lists** stagger at 40ms — short enough that the last row lands before the eye reaches it.
+
+**Reduced motion is not optional.** The global media query flattens every
+duration. Two things keep moving because stilling them would read as frozen:
+the skeleton (falls back to a static fill) and the indeterminate bar (becomes a
+full-width 50%-opacity track). Nothing is *revealed* by a transition, so
+suppressing motion never hides content.
+
+---
+
+## 8. Stacking
+
+Semantic scale in `:root`, referenced as `z-[var(--z-modal)]`. Never arbitrary
+numbers.
+
+`dropdown 20 → sticky 30 → resize 35 → scrim 40 → modal 50 → menu 60 → toast 70 → tooltip 80`
+
+---
+
+## 9. Component library
+
+`src/components/ui/` — every screen is composed from these.
+
+| Primitive | Notes |
+|---|---|
+| `Button` | `primary` (ink fill) · `secondary` · `ghost` · `danger`; `sm/md/lg`; `loading`, `iconOnly`. Filled variants drop to a neutral wash when disabled instead of fading. |
+| `IconButton` | Row/toolbar actions. Resting state is muted, never hidden — hover-only affordances are invisible to keyboard and touch. |
+| `Input` | Soft field. Focus is a ring on the **shell**, never a border-width change. Optional leading icon and trailing control (the trailing slot lives inside the focus ring). |
+| `Field` / `Row` | Label+hint above a control; label+hint with the control hard right. |
+| `Card` / `CardHeader` / `Well` | The widget, its first line, and the recessed container. |
+| `Badge` | Pill. `neutral/accent/danger/warn`, optional dot, optional mono. |
+| `SegmentedControl` | Every exclusive choice. `radio` for settings, `tab` when it swaps a view. Sliding indicator. |
+| `Switch` | 44×24 with an 8px invisible halo so the real target clears 40px. |
+| `Progress` | Determinate + indeterminate. Track is an ink wash so contrast holds on any surface. |
+| `Skeleton` | Region loading. Travelling highlight, not a pulse. |
+| `Spinner` | Only inside a working button or beside a one-line status. |
+| `Dialog` | The one modal shell. |
+| `Tooltip` | CSS-only, for controls whose label is hidden (the collapsed rail). |
+| `EmptyState` | Icon plate, title, teaching copy, and the action that resolves it. |
+| `PageHeader` | One h1 per page, plus the page's own control. |
+
+The brand mark is `public/FLUSS_LOGO.png`, rendered with a plain `<img>` in the
+caption bar. It is the product's identity and not a design-system component —
+don't redraw it, recolour it, or replace it with an icon.
+
+### Interaction states
+
+Every interactive primitive ships **default, hover, focus-visible, active,
+disabled**, plus `loading` and `error` where they apply. Half a set is a bug.
+
+Focus is one treatment app-wide: a 2px accent outline at 2px offset, declared
+in `@layer base` so a utility can still turn it off. Composite controls suppress
+the inner element's ring and show focus on the shell — there is never more than
+one ring on screen.
+
+---
+
+## 10. Icons
+
+Lucide, `strokeWidth={1.75}`, sized by context (`size-3.5` in `sm` controls,
+`size-4` standard, `size-4.5` in the nav rail). Buttons set icon size via
+`[&_svg]:size-*` so every icon in a given control matches without callers
+thinking about it.
+
+---
+
+## 11. Accessibility floor
+
+- Body text ≥4.5:1; verified per token against the least contrasty surface it can land on.
+- Status is text + colour, never colour alone.
+- Every icon-only control has an accessible name (`IconButton` requires `label`).
+- Pointer targets ≥32px, with invisible halos where the visible control is smaller.
+- One h1 per page; section headings are h2.
+- `prefers-reduced-motion` honoured globally.
+- Native `<details>` for progressive disclosure; raw engine output is never the first thing anyone reads.
