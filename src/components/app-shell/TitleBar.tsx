@@ -1,6 +1,7 @@
 import { Minus, Square, Copy, X } from "lucide-react";
 import { useMaximized } from "@/hooks/useMaximized";
 import { minimizeWindow, toggleMaximizeWindow, closeWindow } from "@/lib/window";
+import { isMacOS } from "@/lib/platform";
 import { cn } from "@/lib/cn";
 
 interface TitleBarProps {
@@ -16,6 +17,13 @@ interface TitleBarProps {
  * rounded floating controls look nicer in isolation but throw away the screen
  * corner, and "close" is the one target that has to be hittable by slamming
  * the pointer into the edge when the window is maximised.
+ *
+ * The window is undecorated on every platform, so these buttons are the only
+ * ones there are — which makes their *side* a correctness question, not a
+ * styling one. On macOS the close button belongs in the top-left corner, and
+ * the order runs close, minimise, zoom. Putting a Windows caption cluster in
+ * the top-right of a Mac window means the corner someone throws the pointer at
+ * to close the app does nothing at all.
  */
 export function TitleBar({ onClose }: TitleBarProps) {
   const maximized = useMaximized();
@@ -37,15 +45,60 @@ export function TitleBar({ onClose }: TitleBarProps) {
   const hoverNeutral = "hover:bg-hover hover:text-ink";
   const hoverClose = "hover:bg-danger-solid hover:text-on-danger";
 
+  const close = (
+    <button key="close" onClick={handleClose} aria-label="Close" className={cn(control, hoverClose)}>
+      <X className="size-4" strokeWidth={1.75} />
+    </button>
+  );
+
+  const minimize = (
+    <button
+      key="minimize"
+      onClick={minimizeWindow}
+      aria-label="Minimize"
+      className={cn(control, hoverNeutral)}
+    >
+      <Minus className="size-4" strokeWidth={1.75} />
+    </button>
+  );
+
+  const zoom = (
+    <button
+      key="zoom"
+      onClick={toggleMaximizeWindow}
+      aria-label={maximized ? "Restore" : "Maximize"}
+      className={cn(control, hoverNeutral)}
+    >
+      {maximized ? (
+        <Copy className="size-3.5" strokeWidth={1.75} />
+      ) : (
+        <Square className="size-3.5" strokeWidth={1.75} />
+      )}
+    </button>
+  );
+
+  const controls = (
+    <div className="flex h-full" onDoubleClick={(e) => e.stopPropagation()}>
+      {isMacOS ? [close, minimize, zoom] : [minimize, zoom, close]}
+    </div>
+  );
+
   return (
     <div
       data-tauri-drag-region
       onDoubleClick={toggleMaximizeWindow}
-      className="flex h-11 shrink-0 select-none items-center justify-between"
+      className="flex h-11 shrink-0 select-none items-center"
     >
+      {isMacOS && controls}
+
       {/* Mark and wordmark sit on the rail's own text column, so the app name
-          and the nav labels below it share one left edge. */}
-      <div data-tauri-drag-region className="flex items-center gap-2.5 pl-6">
+          and the nav labels below it share one left edge. Grows to fill, so it
+          stays the drag region whichever side the buttons are on — and on macOS
+          it starts after them rather than under them. */}
+      <div
+        data-tauri-drag-region
+        className={cn("flex flex-1 items-center gap-2.5", isMacOS ? "pl-3" : "pl-6")}
+      >
         <img
           src="/FLUSS_LOGO.png"
           alt=""
@@ -55,33 +108,7 @@ export function TitleBar({ onClose }: TitleBarProps) {
         <span className="text-base font-semibold tracking-[-0.01em] text-ink">Fluss</span>
       </div>
 
-      <div className="flex h-full" onDoubleClick={(e) => e.stopPropagation()}>
-        <button
-          onClick={minimizeWindow}
-          aria-label="Minimize"
-          className={cn(control, hoverNeutral)}
-        >
-          <Minus className="size-4" strokeWidth={1.75} />
-        </button>
-        <button
-          onClick={toggleMaximizeWindow}
-          aria-label={maximized ? "Restore" : "Maximize"}
-          className={cn(control, hoverNeutral)}
-        >
-          {maximized ? (
-            <Copy className="size-3.5" strokeWidth={1.75} />
-          ) : (
-            <Square className="size-3.5" strokeWidth={1.75} />
-          )}
-        </button>
-        <button
-          onClick={handleClose}
-          aria-label="Close"
-          className={cn(control, hoverClose)}
-        >
-          <X className="size-4" strokeWidth={1.75} />
-        </button>
-      </div>
+      {!isMacOS && controls}
     </div>
   );
 }
