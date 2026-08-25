@@ -28,7 +28,14 @@ export function folderName(title: string, fallback = "Playlist"): string {
 /// Append one segment to a directory, in that directory's own separator style.
 /// Mixing separators works but shows up in the UI, and a path the user can't
 /// recognise is a path they can't check.
+///
+/// Decided by the shape of the path, not by looking for a backslash in it: a
+/// backslash is a legal character in a POSIX filename, so a Linux folder called
+/// `My\Videos` would have been joined with backslashes and put the playlist in
+/// a single directory named `My\Videos\Road Trip`. The directory always comes
+/// from the OS folder picker, so it is always absolute — and an absolute POSIX
+/// path starts with "/" where a Windows one never does.
 export function joinPath(directory: string, segment: string): string {
-  const separator = directory.includes("\\") ? "\\" : "/";
+  const separator = directory.startsWith("/") ? "/" : "\\";
   return directory.replace(/[/\\]+$/, "") + separator + segment;
 }

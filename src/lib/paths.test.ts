@@ -33,6 +33,13 @@ describe("joinPath", () => {
     expect(joinPath("/home/me/Videos", "Road Trip")).toBe("/home/me/Videos/Road Trip");
   });
 
+  it("stays POSIX for a folder whose name contains a backslash", () => {
+    // A backslash is a legal filename character on Linux and macOS. Choosing
+    // the separator by looking for one turned this into a single directory
+    // named "My\\Videos\\Road Trip" instead of a folder inside "My\\Videos".
+    expect(joinPath("/home/me/My\\Videos", "Road Trip")).toBe("/home/me/My\\Videos/Road Trip");
+  });
+
   it("doesn't double up a trailing separator", () => {
     expect(joinPath("C:\\Videos\\", "Road Trip")).toBe("C:\\Videos\\Road Trip");
     expect(joinPath("/videos/", "Road Trip")).toBe("/videos/Road Trip");
