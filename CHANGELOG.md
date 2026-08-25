@@ -3,6 +3,19 @@
 The release workflow pulls the notes for a tag from the matching `## vX.Y.Z`
 section below. Keep the newest version at the top.
 
+## v0.11.1
+
+**Fixes**
+- **The window controls are where macOS expects them.** Fluss draws its own
+  title bar on every platform, so these are the only buttons there are — and in
+  the top-right of a Mac window, the corner you throw the pointer at to close
+  the app did nothing. They now sit top-left in close, minimise, zoom order.
+  Windows and Linux are unchanged.
+- **Playlist folders are built correctly on macOS and Linux.** A backslash is a
+  legal character in a filename there, and a download folder containing one made
+  the playlist land in a single oddly-named directory instead of a folder inside
+  the one you chose.
+
 ## v0.11.0
 
 **Playlists**
