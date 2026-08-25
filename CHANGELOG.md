@@ -3,6 +3,53 @@
 The release workflow pulls the notes for a tag from the matching `## vX.Y.Z`
 section below. Keep the newest version at the top.
 
+## v0.11.0
+
+**Playlists**
+- **Paste a playlist link and Fluss queues every video in it.** The preview
+  lists the videos with their runtimes and total length; one button queues the
+  lot. A link that is both a video and a playlist (`watch?v=…&list=…`) still
+  resolves to the single video it points at, with an offer to load the whole
+  list instead — no surprise queue of two hundred files.
+- **A playlist saves into a folder of its own name**, created under the folder
+  you chose.
+- **The queue treats a playlist as one thing.** Its videos are one block with
+  their own count and their own **Cancel all**, and they're numbered by their
+  position in the playlist rather than their position in the list. Stopping a
+  playlist keeps the videos it never reached, so **Resume** can put every one of
+  them back in a single click — in playlist order, starting with whichever video
+  was interrupted.
+- **History shows a playlist as one row**, not thirty. It carries its own
+  counts, opens its folder, re-fetches what's missing, and removes in one go.
+  Searching the playlist name finds everything that came from it.
+- **One notification per playlist, not per video.** A finished playlist reports
+  once, with how many of its videos landed.
+
+**Downloads**
+- **The queue survives closing the app.** Unfinished downloads come back when
+  you reopen Fluss and carry on — a half-downloaded video resumes from where it
+  stopped rather than starting the file again.
+- **Interrupted downloads resume from the partial file in the folder.** The
+  scan now matches the names yt-dlp actually writes on Windows, where characters
+  the filesystem refuses are replaced with lookalikes, and it runs whether or not
+  "Keep partial files" is on — an existing partial is worth using however it got
+  there.
+- **Deleted files are noticed.** Opening Downloads or History checks what's
+  actually on disk, so a playlist whose folder you deleted stops claiming to be
+  downloaded and offers to fetch it again. Restore the folder and the rows go
+  back to normal.
+- **A download that was already in the folder says so** instead of reporting a
+  download that never ran.
+
+**Fixes**
+- Partial files belonging to one video can no longer be taken, or deleted, by
+  another video in the same folder — "Episode 1" was matching "Episode 10".
+- The download folder is created if it's missing rather than refused, so a
+  playlist's own folder no longer fails the first download in it.
+- Engine updates on a package-manager install (pip, winget) now explain how to
+  update instead of reporting a failure.
+- Audio downloads no longer show a video quality badge.
+
 ## v0.10.0
 
 **UI**
