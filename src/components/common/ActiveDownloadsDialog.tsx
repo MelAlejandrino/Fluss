@@ -62,6 +62,12 @@ export function ActiveDownloadsDialog({
     >
       There {active.length === 1 ? "is" : "are"} {active.length} active download
       {active.length > 1 ? "s" : ""}. {question}
+      {/* The queue is written to disk, so this is an interruption rather than a
+          loss — worth saying, because the dialog otherwise reads as a warning
+          that everything waiting is about to be thrown away. */}
+      <span className="mt-2 block text-ink-3">
+        Anything unfinished will be waiting in the queue next time you open Fluss.
+      </span>
     </Dialog>
   );
 }

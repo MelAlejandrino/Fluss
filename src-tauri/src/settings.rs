@@ -146,6 +146,13 @@ pub async fn update_engine(app: AppHandle) -> Result<EngineUpdate, String> {
             String::from_utf8_lossy(&out.stderr)
         );
         if !out.status.success() {
+            // Not every non-zero exit is a failure to report as one: yt-dlp
+            // exits 100 when a package manager owns the install, which is an
+            // outcome the user needs explained, not an error dialog.
+            if is_package_manager_install(&text) {
+                log::info!("engine update declined: {}", text.trim());
+                return Ok(package_manager_outcome());
+            }
             log::error!("engine update failed: {}", text.trim());
             return Err(text.trim().to_string());
         }
@@ -154,6 +161,30 @@ pub async fn update_engine(app: AppHandle) -> Result<EngineUpdate, String> {
     })
     .await
     .map_err(|e| format!("Update task failed: {e}"))?
+}
+
+/// yt-dlp refuses to update itself when pip, winget or a distro package owns
+/// the install — it names whichever one it found, so match on all of them.
+fn is_package_manager_install(out: &str) -> bool {
+    let lower = out.to_lowercase();
+    lower.contains("package manager")
+        || lower.contains("not a self-updating build")
+        || lower.contains("with pip")
+        || lower.contains("from pypi")
+}
+
+/// Says who *can* update it. "Fluss can't" on its own leaves the user stuck on
+/// a broken extractor with nowhere to go, and a stale yt-dlp is the single most
+/// common cause of a download failing.
+fn package_manager_outcome() -> EngineUpdate {
+    EngineUpdate {
+        message: concat!(
+            "This engine was installed by a package manager, so Fluss can't update it. ",
+            "Update it there instead — for a pip install, `pip install -U yt-dlp`."
+        )
+        .to_string(),
+        updated: false,
+    }
 }
 
 /// Reads yt-dlp's update output. It exits 0 whether it updated, was already
@@ -171,10 +202,8 @@ fn parse_update(out: &str) -> EngineUpdate {
             .to_string()
     } else if lower.contains("up to date") || lower.contains("up-to-date") {
         "The engine is already up to date.".to_string()
-    } else if lower.contains("package manager") || lower.contains("not a self-updating build") {
-        // pip/winget/homebrew installs, and the dev fallback to PATH.
-        "This engine was installed by a package manager, so Fluss can't update it."
-            .to_string()
+    } else if is_package_manager_install(out) {
+        return package_manager_outcome();
     } else {
         // Unrecognised but successful — show yt-dlp's own last word rather than
         // inventing an outcome.
@@ -298,5 +327,26 @@ mod tests {
         // Fewer than 3 tokens must not panic.
         assert_eq!(parse_ffmpeg_version("ffmpeg version"), UNKNOWN);
         assert_eq!(parse_ffmpeg_version(""), UNKNOWN);
+    }
+
+    #[test]
+    fn a_pip_install_is_an_outcome_not_an_error() {
+        // Verbatim from yt-dlp 2026.07.04, which exits 100 saying this.
+        let out = "Current version: stable@2026.07.04 from yt-dlp/yt-dlp
+                   Latest version: stable@2026.08.19 from yt-dlp/yt-dlp
+                   ERROR: You installed yt-dlp with pip or using the wheel from PyPi;                    Use that to update";
+        assert!(is_package_manager_install(out));
+
+        let result = parse_update(out);
+        assert!(!result.updated);
+        // The message has to name the way out, not just refuse.
+        assert!(result.message.contains("pip install -U yt-dlp"), "{}", result.message);
+    }
+
+    #[test]
+    fn a_real_update_is_not_mistaken_for_a_package_manager() {
+        let out = "Updated yt-dlp to stable@2026.08.19";
+        assert!(!is_package_manager_install(out));
+        assert!(parse_update(out).updated);
     }
 }

@@ -1,6 +1,6 @@
 import { notify } from "@/lib/toast";
 
-type Key = "settings" | "history";
+type Key = "settings" | "history" | "queue";
 
 // A failed write is otherwise invisible: the UI shows the change as applied,
 // then it's gone on restart with no explanation. Disk full, antivirus holding

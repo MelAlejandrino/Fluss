@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { DownloadHistoryItem } from "@/types/download";
+import { groupHistory } from "@/lib/historyGroups";
 
 export type HistoryFilter = "all" | "completed" | "failed";
 
@@ -25,7 +26,13 @@ export function useHistoryFilter(history: DownloadHistoryItem[]) {
         (filter === "failed" && item.status !== "completed");
       if (!matchesStatus) return false;
       if (!q) return true;
-      return item.title.toLowerCase().includes(q) || item.url.toLowerCase().includes(q);
+      return (
+        item.title.toLowerCase().includes(q) ||
+        item.url.toLowerCase().includes(q) ||
+        // Searching the playlist name finds everything that came from it, even
+        // when no individual video is called that.
+        (item.playlist?.title.toLowerCase().includes(q) ?? false)
+      );
     });
   }, [history, query, filter]);
 
@@ -35,6 +42,10 @@ export function useHistoryFilter(history: DownloadHistoryItem[]) {
     filter,
     setFilter,
     filtered,
+    // What the page actually renders: one row per download, or one block per
+    // playlist. Grouping *after* filtering means a search narrows what's inside
+    // a playlist rather than hiding the playlist itself.
+    groups: groupHistory(filtered, history),
     /** True when a filter is hiding everything, rather than history being empty. */
     isFiltered: query.trim().length > 0 || filter !== "all",
   } as const;

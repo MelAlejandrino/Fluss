@@ -36,12 +36,24 @@ pub struct DownloadOptions {
     /// Title from a previous attempt, used to restore partial files on retry.
     #[serde(default)]
     pub previous_title: Option<String>,
+    /// The title as the queue knows it now. A playlist item has one before it
+    /// ever runs, which is what lets a partial left by an earlier attempt be
+    /// found even when this attempt isn't a retry of it.
+    #[serde(default)]
+    pub title: Option<String>,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadResult {
     pub file_path: String,
+    /// The file was already in the folder, so yt-dlp skipped the transfer.
+    ///
+    /// Not a failure and not something to work around — re-fetching a file you
+    /// already have is the wrong thing to do. It's reported because otherwise a
+    /// playlist of twelve "downloads" in two seconds, with no progress bar and
+    /// no bytes, looks like the app is broken.
+    pub already_existed: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -101,7 +113,22 @@ pub const NO_WRITE_PERMISSION: &str = "__NOWRITE__";
 fn check_output_directory(dir: &str) -> Result<(), String> {
     let path = Path::new(dir);
     if !path.is_dir() {
-        return Err(NO_OUTPUT_DIR.to_string());
+        // Something is already there and it isn't a folder. Nothing to create,
+        // and "no permission" would be the wrong thing to say about a file.
+        if path.exists() {
+            return Err(NO_OUTPUT_DIR.to_string());
+        }
+        // A playlist saves into a folder of its own name, which by definition
+        // doesn't exist the first time. Create it — but only the last segment:
+        // if the parent is missing too, the whole location is gone (unplugged
+        // drive, deleted tree), and quietly rebuilding it would write files
+        // somewhere the user is no longer looking.
+        match path.parent() {
+            Some(parent) if parent.is_dir() => {
+                fs::create_dir_all(path).map_err(|_| NO_WRITE_PERMISSION.to_string())?;
+            }
+            _ => return Err(NO_OUTPUT_DIR.to_string()),
+        }
     }
     // ponytail: write-and-delete probe. Racy in theory, but it catches the real
     // cases (read-only volume, no ACL) that a metadata check misses on Windows.
@@ -137,11 +164,21 @@ pub async fn start_download(
     // If the user keeps partial files and this is a retry, restore the
     // previous attempt's `.part`/`.ytdl` files from the output directory into
     // the fresh scratch directory so yt-dlp can find them and resume.
-    if keep_partial {
-        if let (Some(s), Some(title)) = (&scratch, &options.previous_title) {
-            restore_partial_files(s, &options.output_directory, title);
-        }
-    }
+    // Not gated on "Keep partial files": that setting decides whether partials
+    // are *kept* when a download stops, not whether an existing one is used. A
+    // half-downloaded file sitting in the folder should be picked up however it
+    // got there — an earlier run, a crash, or the setting being switched on
+    // after the fact.
+    // Owned, because `options` moves into the worker below and the cleanup that
+    // runs afterwards needs to know whose partials are whose.
+    let titles: Vec<String> = [options.previous_title.clone(), options.title.clone()]
+        .into_iter()
+        .flatten()
+        .collect();
+    let restored = match &scratch {
+        Some(s) => restore_partial_files(s, &options.output_directory, &titles),
+        None => 0,
+    };
     let mut args = build_args(&options, ffmpeg.as_deref(), scratch.as_deref());
     // Insert the JS-runtime and cookie flags before the trailing URL.
     let mut extra = binaries::js_runtime_args(&app);
@@ -186,7 +223,7 @@ pub async fn start_download(
         let id = id.clone();
         let child = child.clone();
         tauri::async_runtime::spawn_blocking(move || {
-            run_to_completion(app, id, child, stdout, stderr, &options.output_directory, options.keep_partial)
+            run_to_completion(app, id, child, stdout, stderr)
         })
         .await
         .map_err(|e| format!("Download task failed: {e}"))?
@@ -197,22 +234,40 @@ pub async fn start_download(
     if let Some(dir) = &scratch {
         // Only a failed or cancelled attempt has leftovers worth keeping — a
         // finished download makes its own partials dead weight.
-        if keep_partial && result.is_err() {
+        //
+        // `restored > 0` matters as much as the setting: this attempt took a
+        // partial out of the user's folder, and the scratch directory is about
+        // to be deleted. Putting it back is not a feature, it's not leaving
+        // someone worse off than if we had never looked.
+        if (keep_partial || restored > 0) && result.is_err() {
             preserve_partial_artifacts(dir, &output_directory);
+        } else if result.is_err() {
+            // "Keep partial files" is off and we took nothing from the folder,
+            // so clear this download's own leftovers — and only its own. The
+            // sweep used to take every partial in the directory, which in a
+            // playlist folder is twenty-nine other videos' progress.
+            cleanup_partial_files(&output_directory, &titles);
         }
         // Whatever is left is ours and unwanted, however this ended.
         let _ = fs::remove_dir_all(dir);
     }
-    if let Ok(file_path) = &result {
+    if let Ok((file_path, _)) = &result {
         // Clears this file's partials from an earlier cancelled attempt, which
         // otherwise stayed in the folder forever once the retry succeeded.
         clear_stale_artifacts(&output_directory, file_path);
     }
 
     match result {
-        Ok(file_path) => {
-            log::info!("download {id}: completed");
-            Ok(DownloadResult { file_path })
+        Ok((file_path, already_existed)) => {
+            if already_existed {
+                log::info!("download {id}: already in the output folder, nothing fetched");
+            } else {
+                log::info!("download {id}: completed");
+            }
+            Ok(DownloadResult {
+                file_path,
+                already_existed,
+            })
         }
         Err(err) if cancelled.load(Ordering::SeqCst) => {
             let _ = err;
@@ -309,52 +364,111 @@ fn preserve_partial_artifacts(scratch: &Path, output_directory: &str) {
     }
 }
 
-/// Restores partial artifacts from the output directory back into the scratch
-/// directory so yt-dlp can find them and resume a previously cancelled download.
+/// Everything a filename and a title still have in common after yt-dlp has
+/// rewritten it: letters and digits, lowercased, with every run of anything
+/// else collapsed to one space.
 ///
-/// When "Keep partial files" is on and a download is cancelled, the `.part` and
-/// `.ytdl` files are moved to the user's output folder. On retry, a new scratch
-/// directory is created — yt-dlp can't see the old partials and starts from
-/// zero. This function copies matching files back so resume works.
-fn restore_partial_files(scratch: &Path, output_directory: &str, previous_title: &str) {
-    let Ok(entries) = fs::read_dir(Path::new(output_directory)) else {
-        return;
-    };
-    // yt-dlp sanitises title characters that are illegal in filenames (/, \, :, *,
-    // etc.) by replacing them with `_`. The raw title from metadata won't match
-    // the sanitised version in the `.part` filename, so normalise the needle the
-    // same way before comparing.
-    let needle = previous_title
-        .replace('/', "_")
-        .replace('\\', "_")
-        .replace(':', "_")
-        .replace('*', "_")
-        .replace('?', "_")
-        .replace('"', "_")
-        .replace('<', "_")
-        .replace('>', "_")
-        .replace('|', "_")
-        .to_ascii_lowercase();
-    for entry in entries.flatten() {
-        let from = entry.path();
-        if !from.is_file() || !is_partial_artifact(&from) {
-            continue;
-        }
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy().to_ascii_lowercase();
-        // yt-dlp's output template puts the title at the start of the filename,
-        // so starts_with is the correct check. contains would be too broad —
-        // a title like "a" would match every partial file in the folder.
-        if name_str.starts_with(&needle) {
-            let to = scratch.join(&name);
-            if fs::rename(&from, &to).is_err() {
-                let _ = fs::copy(&from, &to);
-                // Clean up the original when copy was used (cross-volume) so
-                // the partial doesn't live in both directories simultaneously.
-                let _ = fs::remove_file(&from);
+/// yt-dlp does not put the raw title on disk. On Windows it rewrites the
+/// characters the filesystem refuses — a colon, a pipe and a slash all become
+/// lookalike fullwidth characters — and the exact set has changed between
+/// releases. Matching on what survives *any* such rewrite is the only version
+/// of this that keeps working; guessing the substitutions (this used to guess
+/// an underscore) silently failed for every title containing punctuation.
+fn normalize_for_match(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut pending_space = false;
+    for c in s.chars() {
+        if c.is_alphanumeric() {
+            if pending_space && !out.is_empty() {
+                out.push(' ');
             }
+            pending_space = false;
+            out.extend(c.to_lowercase());
+        } else {
+            pending_space = true;
         }
     }
+    out
+}
+
+/// Scans the output directory for partial artifacts belonging to this download
+/// and moves them into the scratch directory, where yt-dlp finds them and
+/// resumes instead of fetching the video again.
+///
+/// Matching is a prefix test on the normalised names, because yt-dlp's template
+/// puts the title first and appends its own suffixes:
+/// `Some Title [1080p].f399.mp4.part`.
+///
+/// A wrong match is harmless by construction. Only `.part`/`.ytdl`/`.part-FragN`
+/// files are ever touched — never the user's media — and yt-dlp uses a restored
+/// file only if it matches the destination filename it computes for itself;
+/// anything else is ignored and swept away with the scratch directory.
+/// A prefix that ends on a word boundary.
+///
+/// Plain `starts_with` matches "Episode 1" against "Episode 10", and in a
+/// playlist folder those are two different videos: Episode 1 would take
+/// Episode 10's partial, yt-dlp would ignore the file it can't use, and the
+/// scratch directory it now lives in gets deleted when Episode 1 finishes.
+/// Numbered titles make that the common case, not an edge case.
+fn starts_with_word(haystack: &str, needle: &str) -> bool {
+    // Both sides are normalised to space-separated words, so the only valid
+    // continuations are "nothing" and "another word".
+    haystack == needle
+        || (haystack.len() > needle.len()
+            && haystack.starts_with(needle)
+            && haystack.as_bytes()[needle.len()] == b' ')
+}
+
+/// Returns how many artifacts were taken out of the output directory. The
+/// caller owes them back if this attempt doesn't finish — see `start_download`.
+/// The partial artifacts in `output_directory` that belong to one download.
+///
+/// Everything that touches partials goes through here. A playlist puts thirty
+/// videos in one folder, so "every `.part` in the directory" is never the right
+/// set — it's twenty-nine other people's downloads plus yours.
+fn partials_for(output_directory: &str, titles: &[String]) -> Vec<PathBuf> {
+    let needles: Vec<String> = titles
+        .iter()
+        .map(|t| normalize_for_match(t))
+        // A one- or two-character needle would prefix-match half the folder.
+        // Nothing is worth matching on that basis.
+        .filter(|n| n.chars().count() >= 3)
+        .collect();
+    if needles.is_empty() {
+        return Vec::new();
+    }
+
+    let Ok(entries) = fs::read_dir(Path::new(output_directory)) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.is_file() && is_partial_artifact(path))
+        .filter(|path| {
+            let name = path.file_name().unwrap_or_default().to_string_lossy();
+            let normalized = normalize_for_match(&name);
+            needles.iter().any(|needle| starts_with_word(&normalized, needle))
+        })
+        .collect()
+}
+
+/// Returns how many artifacts were taken out of the output directory. The
+/// caller owes them back if this attempt doesn't finish — see `start_download`.
+fn restore_partial_files(scratch: &Path, output_directory: &str, titles: &[String]) -> usize {
+    let found = partials_for(output_directory, titles);
+    for from in &found {
+        let Some(name) = from.file_name() else { continue };
+        let to = scratch.join(name);
+        log::info!("resuming from partial: {}", name.to_string_lossy());
+        if fs::rename(from, &to).is_err() {
+            let _ = fs::copy(from, &to);
+            // Clean up the original when copy was used (cross-volume) so the
+            // partial doesn't live in both directories simultaneously.
+            let _ = fs::remove_file(from);
+        }
+    }
+    found.len()
 }
 
 /// Removes the partial artifacts belonging to a file that has now downloaded in
@@ -382,15 +496,9 @@ fn clear_stale_artifacts(output_directory: &str, file_path: &str) {
 }
 
 /// Clears the failed attempt's leftovers when "Keep partial files" is off.
-fn cleanup_partial_files(output_directory: &str) {
-    let Ok(entries) = fs::read_dir(Path::new(output_directory)) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_file() && is_partial_artifact(&path) {
-            let _ = fs::remove_file(&path);
-        }
+fn cleanup_partial_files(output_directory: &str, titles: &[String]) {
+    for path in partials_for(output_directory, titles) {
+        let _ = fs::remove_file(&path);
     }
 }
 
@@ -403,9 +511,7 @@ fn run_to_completion(
     child: Arc<Mutex<Child>>,
     stdout: impl Read,
     stderr: impl Read + Send + 'static,
-    output_directory: &str,
-    keep_partial: bool,
-) -> Result<String, String> {
+) -> Result<(String, bool), String> {
     let stderr_thread = std::thread::spawn(move || {
         BufReader::new(stderr)
             .lines()
@@ -421,8 +527,12 @@ fn run_to_completion(
     // infer the phase from the progress values themselves). Report the tail as
     // "processing" → the UI shows "Finalizing…" instead of a jarring restart.
     let mut seen_full = false;
+    let mut already_existed = false;
 
     for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+        if is_already_downloaded(&line) {
+            already_existed = true;
+        }
         if let Some(rest) = line.strip_prefix(PROGRESS_TAG) {
             let status = if seen_full { "processing" } else { "downloading" };
             if let Some(ev) = parse_progress(&id, rest.trim(), status) {
@@ -447,7 +557,7 @@ fn run_to_completion(
     let stderr_lines = stderr_thread.join().unwrap_or_default();
 
     if status.success() {
-        Ok(file_path)
+        Ok((file_path, already_existed))
     } else {
         // Keep the tail — the actionable error is usually last.
         let tail = stderr_lines
@@ -458,11 +568,15 @@ fn run_to_completion(
             .cloned()
             .collect::<Vec<_>>()
             .join("\n");
-        if !keep_partial {
-            cleanup_partial_files(output_directory);
-        }
         Err(tail)
     }
+}
+
+/// yt-dlp's way of saying it didn't transfer anything: the file is already
+/// there. It still runs post-processing over it afterwards, which is why the
+/// download otherwise looks like a normal, extremely fast success.
+fn is_already_downloaded(line: &str) -> bool {
+    line.contains("has already been downloaded")
 }
 
 fn parse_progress(id: &str, line: &str, status: &str) -> Option<ProgressEvent> {
@@ -611,6 +725,7 @@ mod tests {
             output_directory: "/out".into(),
             format: format.into(),
             quality: Some("best".into()),
+            title: None,
             overwrite: false,
             keep_partial: false,
             previous_title: None,
@@ -739,7 +854,7 @@ mod tests {
         // Edge case: title is a substring but not at the start.
         fs::write(out.join("Not My Great Video.mp4.part"), b"x").unwrap();
 
-        restore_partial_files(&scratch, &out.to_string_lossy(), "My Great Video");
+        restore_partial_files(&scratch, &out.to_string_lossy(), &["My Great Video".to_string()]);
 
         // Matching partials should now be in the scratch directory.
         for f in ["My Great Video [720p].mp4.part", "My Great Video [720p].mp4.part-Frag0", "My Great Video [720p].mp4.ytdl"] {
@@ -765,7 +880,7 @@ mod tests {
         fs::write(out.join("Video_ Part 2 [720p].mp4.part"), b"x").unwrap();
         fs::write(out.join("Video_ Part 2 [720p].mp4.ytdl"), b"x").unwrap();
 
-        restore_partial_files(&scratch, &out.to_string_lossy(), "Video: Part 2");
+        restore_partial_files(&scratch, &out.to_string_lossy(), &["Video: Part 2".to_string()]);
 
         assert!(scratch.join("Video_ Part 2 [720p].mp4.part").exists());
         assert!(scratch.join("Video_ Part 2 [720p].mp4.ytdl").exists());
@@ -845,7 +960,13 @@ mod tests {
 
     #[test]
     fn missing_output_directory_is_rejected_before_spawn() {
-        let missing = std::env::temp_dir().join("fluss-does-not-exist-xyz");
+        // Two levels missing: the location itself is gone, not just the folder
+        // a playlist would have made inside it.
+        let root = std::env::temp_dir().join("fluss-does-not-exist-xyz");
+        // This function creates directories now, so a previous run may have
+        // left one here. Start from actually-missing or the test proves nothing.
+        let _ = fs::remove_dir_all(&root);
+        let missing = root.join("nor-this");
         assert_eq!(
             check_output_directory(&missing.to_string_lossy()),
             Err(NO_OUTPUT_DIR.to_string())
@@ -883,7 +1004,16 @@ mod tests {
             fs::write(dir.join(f), b"x").unwrap();
         }
 
-        cleanup_partial_files(&dir.to_string_lossy());
+        // A sibling video's kept partial. A playlist puts them all in one
+        // folder, and sweeping the directory wholesale took every one of them.
+        fs::write(dir.join("Another Video.mp4.part"), b"x").unwrap();
+
+        cleanup_partial_files(&dir.to_string_lossy(), &["Video".to_string()]);
+
+        assert!(
+            dir.join("Another Video.mp4.part").exists(),
+            "another download's partial must survive"
+        );
 
         for f in keep {
             assert!(dir.join(f).exists(), "{f} is the user's file — must survive");
@@ -911,5 +1041,173 @@ mod tests {
         assert_eq!(ev.progress, 0.25);
         assert_eq!(ev.eta, None);
         assert_eq!(ev.status, "processing");
+    }
+
+    #[test]
+    fn a_missing_playlist_folder_is_created_not_refused() {
+        let base = std::env::temp_dir().join("fluss-outdir-create-test");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let target = base.join("Road Trip");
+
+        assert!(!target.is_dir());
+        assert_eq!(check_output_directory(&target.to_string_lossy()), Ok(()));
+        assert!(target.is_dir(), "the playlist folder should have been created");
+        // And the write probe cleaned up after itself.
+        assert!(!target.join(".fluss-write-test").exists());
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_folder_whose_parent_is_gone_is_still_refused() {
+        // The unplugged-drive case: rebuilding the tree here would put files
+        // somewhere the user can't find, so it stays an error.
+        let missing = std::env::temp_dir()
+            .join("fluss-outdir-missing-test")
+            .join("gone")
+            .join("Road Trip");
+        let _ = fs::remove_dir_all(std::env::temp_dir().join("fluss-outdir-missing-test"));
+
+        assert_eq!(
+            check_output_directory(&missing.to_string_lossy()),
+            Err(NO_OUTPUT_DIR.to_string())
+        );
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn an_existing_folder_is_accepted_unchanged() {
+        let dir = std::env::temp_dir().join("fluss-outdir-existing-test");
+        fs::create_dir_all(&dir).unwrap();
+        assert_eq!(check_output_directory(&dir.to_string_lossy()), Ok(()));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn restore_matches_the_names_yt_dlp_actually_writes_on_windows() {
+        // The bug this covers: the needle used to be built by replacing illegal
+        // characters with an underscore, but yt-dlp writes fullwidth lookalikes.
+        // Every title with a colon, pipe or slash in it silently failed to match
+        // and the video restarted from zero with its partial sitting right there.
+        let base = std::env::temp_dir().join("fluss-restore-fullwidth-test");
+        let scratch = base.join("scratch");
+        let out = base.join("out");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&scratch).unwrap();
+        fs::create_dir_all(&out).unwrap();
+
+        let on_disk = format!("Ep 3{} Hooks {} Deep Dive [1080p].f399.mp4.part", "：", "｜");
+        fs::write(out.join(&on_disk), b"x").unwrap();
+        // A different video that merely shares the opening word.
+        fs::write(out.join("Ep 4 Something Else [1080p].f399.mp4.part"), b"x").unwrap();
+
+        restore_partial_files(
+            &scratch,
+            &out.to_string_lossy(),
+            &["Ep 3: Hooks | Deep Dive".to_string()],
+        );
+
+        assert!(scratch.join(&on_disk).exists(), "the partial should have been found");
+        assert!(out.join("Ep 4 Something Else [1080p].f399.mp4.part").exists());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn restore_falls_back_to_the_current_title() {
+        // Not a retry — a fresh attempt at a video whose partial is already in
+        // the folder. There is no previous title, only the one the queue holds.
+        let base = std::env::temp_dir().join("fluss-restore-current-title-test");
+        let scratch = base.join("scratch");
+        let out = base.join("out");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&scratch).unwrap();
+        fs::create_dir_all(&out).unwrap();
+        fs::write(out.join("Some Video [720p].mp4.part"), b"x").unwrap();
+
+        restore_partial_files(&scratch, &out.to_string_lossy(), &["Some Video".to_string()]);
+
+        assert!(scratch.join("Some Video [720p].mp4.part").exists());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn restore_does_nothing_without_a_usable_title() {
+        let base = std::env::temp_dir().join("fluss-restore-notitle-test");
+        let scratch = base.join("scratch");
+        let out = base.join("out");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&scratch).unwrap();
+        fs::create_dir_all(&out).unwrap();
+        fs::write(out.join("Anything [720p].mp4.part"), b"x").unwrap();
+
+        // Nothing to match on, and a two-character title is too short to match
+        // on safely — it would prefix-match half the folder.
+        restore_partial_files(&scratch, &out.to_string_lossy(), &[]);
+        restore_partial_files(&scratch, &out.to_string_lossy(), &["A!".to_string()]);
+
+        assert!(out.join("Anything [720p].mp4.part").exists());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn normalize_survives_any_substitution_scheme() {
+        // Same title, three ways of writing it to disk.
+        let raw = normalize_for_match("Ep 3: Hooks | Deep Dive");
+        assert_eq!(normalize_for_match("Ep 3_ Hooks _ Deep Dive"), raw);
+        assert_eq!(
+            normalize_for_match(&format!("Ep 3{} Hooks {} Deep Dive", "：", "｜")),
+            raw
+        );
+        // And the filename yt-dlp builds from it still starts with the title.
+        assert!(normalize_for_match("Ep 3_ Hooks _ Deep Dive [1080p].f399.mp4.part")
+            .starts_with(&raw));
+    }
+
+    #[test]
+    fn recognises_the_line_yt_dlp_prints_when_it_skips() {
+        // Without this the download reports a plain success: no bytes, no
+        // progress, done in a second. Re-queueing a playlist you already have
+        // then looks like twelve broken downloads instead of twelve files that
+        // were already there.
+        assert!(is_already_downloaded(
+            r"[download] C:\Users\me\Videos\Road Trip\Ep 1.mp3 has already been downloaded"
+        ));
+        assert!(!is_already_downloaded("[download] 4.2% of 20.14MiB at 300KiB/s"));
+        assert!(!is_already_downloaded("[download] Destination: Ep 1.mp3"));
+    }
+
+    #[test]
+    fn restore_does_not_take_a_sibling_episodes_partial() {
+        // "Episode 1" is a character-prefix of "Episode 10", and in a playlist
+        // folder those are two different videos. Taking the wrong one is not
+        // harmless: yt-dlp ignores the file it can't use, and the scratch
+        // directory it was moved into is deleted when this download finishes.
+        let base = std::env::temp_dir().join("fluss-restore-sibling-test");
+        let scratch = base.join("scratch");
+        let out = base.join("out");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&scratch).unwrap();
+        fs::create_dir_all(&out).unwrap();
+        fs::write(out.join("Episode 10 [1080p].f399.mp4.part"), b"x").unwrap();
+        fs::write(out.join("Episode 1 [1080p].f399.mp4.part"), b"x").unwrap();
+
+        let taken = restore_partial_files(&scratch, &out.to_string_lossy(), &["Episode 1".to_string()]);
+
+        assert_eq!(taken, 1);
+        assert!(scratch.join("Episode 1 [1080p].f399.mp4.part").exists());
+        assert!(
+            out.join("Episode 10 [1080p].f399.mp4.part").exists(),
+            "episode 10's partial must be left alone"
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn word_prefix_stops_at_a_word_boundary() {
+        assert!(starts_with_word("episode 1", "episode 1"));
+        assert!(starts_with_word("episode 1 1080p f399 mp4 part", "episode 1"));
+        assert!(!starts_with_word("episode 10 1080p f399 mp4 part", "episode 1"));
+        assert!(!starts_with_word("epi", "episode"));
     }
 }

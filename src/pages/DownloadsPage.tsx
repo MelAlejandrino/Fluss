@@ -4,11 +4,25 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { useDownloads } from "@/hooks/useDownloads";
+import { useExpanded } from "@/hooks/useExpanded";
 import { useUiStore } from "@/stores/uiStore";
 import { startQueue } from "@/lib/downloadManager";
 
 export function DownloadsPage() {
-  const { active, queued, finished, open, reveal, cancel, retry } = useDownloads();
+  const {
+    active,
+    queued,
+    queuedGroups,
+    finished,
+    finishedGroups,
+    open,
+    reveal,
+    cancel,
+    cancelPlaylist,
+    retry,
+    retryPlaylist,
+  } = useDownloads();
+  const { isExpanded, toggle } = useExpanded();
   const newDownload = useUiStore((s) => s.newDownload);
   const isEmpty = active.length === 0 && queued.length === 0 && finished.length === 0;
   // Nothing is running but something is waiting — offer the manual kick.
@@ -44,12 +58,16 @@ export function DownloadsPage() {
       ) : (
         <DownloadQueue
           active={active}
-          queued={queued}
-          finished={finished}
+          queuedGroups={queuedGroups}
+          finishedGroups={finishedGroups}
           onOpen={open}
           onReveal={reveal}
           onCancel={cancel}
+          onCancelPlaylist={cancelPlaylist}
           onRetry={retry}
+          onRetryPlaylist={retryPlaylist}
+          isExpanded={isExpanded}
+          onToggle={toggle}
         />
       )}
     </div>

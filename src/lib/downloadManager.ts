@@ -1,11 +1,13 @@
-import { useDownloadStore } from "@/stores/downloadStore";
+import { useDownloadStore, restoredQueue } from "@/stores/downloadStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useHistoryStore } from "@/stores/historyStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { api } from "@/lib/api";
+import { isPlaylist } from "@/lib/analysis";
 import { CANCELLED, friendlyError, errorDetails, ANALYZE_FALLBACK } from "@/lib/errors";
 import { notify } from "@/lib/toast";
-import type { DownloadItem } from "@/types/download";
+import type { DownloadItem, DownloadHistoryItem, PlaylistRef } from "@/types/download";
+import { isPending, isUnfinished, byPlaylistOrder } from "@/lib/downloadGroups";
 import type { DownloadFormat, VideoQuality } from "@/types/media";
 
 export interface EnqueueInput {
@@ -17,6 +19,16 @@ export interface EnqueueInput {
   outputDirectory: string;
   /** Title from a previous attempt, used to restore partial files on retry. */
   previousTitle?: string;
+  /** Set when this came from a playlist, not a single link. */
+  playlist?: PlaylistRef;
+  /** Its position in that playlist, from zero. */
+  playlistIndex?: number;
+  /**
+   * When it first joined the queue. Carried over by a retry so a playlist keeps
+   * its own order: a resume enqueues its videos in the same millisecond, and
+   * fresh timestamps would leave nothing to sort them by.
+   */
+  createdAt?: string;
 }
 
 /// The next download to start: nothing if one is already active, else the
@@ -29,28 +41,43 @@ export function nextToStart(downloads: DownloadItem[]): DownloadItem | null {
 }
 
 export function enqueue(input: EnqueueInput) {
-  if (!input.outputDirectory) {
-    notify(
-      "No download folder selected. Choose one in Settings or pick a folder.",
-      "error",
-    );
-    return;
-  }
+  enqueueMany([input]);
+}
 
-  const id = crypto.randomUUID();
-  useDownloadStore.getState().add({
-    id,
-    url: input.url,
-    title: input.title,
-    thumbnailUrl: input.thumbnailUrl,
-    format: input.format,
-    quality: input.quality,
-    outputDirectory: input.outputDirectory,
-    previousTitle: input.previousTitle,
-    status: "queued",
-    progress: 0,
-    createdAt: new Date().toISOString(),
-  });
+/// Queue a batch as one operation.
+///
+/// A playlist is not always twelve videos — a channel's uploads or a YouTube
+/// Mix can be thousands. Adding them one at a time meant a store update and a
+/// full rewrite of `queue.json` per video, each write carrying every item added
+/// so far: quadratic work on the UI thread, with the window locked for as long
+/// as it took. One update, one write.
+export function enqueueMany(inputs: EnqueueInput[]) {
+  const wanted = inputs.filter((input) => input.outputDirectory);
+  if (wanted.length !== inputs.length) {
+    notify("No download folder selected. Choose one in Settings or pick a folder.", "error");
+  }
+  if (!wanted.length) return;
+
+  const now = new Date().toISOString();
+  useDownloadStore.getState().addMany(
+    // Reversed, because the store keeps newest first and the queue runs from
+    // the tail: this leaves the batch in its own order.
+    [...wanted].reverse().map((input) => ({
+      id: crypto.randomUUID(),
+      url: input.url,
+      title: input.title,
+      thumbnailUrl: input.thumbnailUrl,
+      format: input.format,
+      quality: input.quality,
+      outputDirectory: input.outputDirectory,
+      previousTitle: input.previousTitle,
+      playlist: input.playlist,
+      playlistIndex: input.playlistIndex,
+      status: "queued" as const,
+      progress: 0,
+      createdAt: input.createdAt ?? now,
+    })),
+  );
   useUiStore.getState().navigate("downloads");
   // "Start downloads automatically" off → leave it queued for a manual Start.
   if (useSettingsStore.getState().settings.autoStartDownloads) {
@@ -64,6 +91,34 @@ export function enqueue(input: EnqueueInput) {
 /// Manually kick the queue (Start button when auto-start is off).
 export function startQueue() {
   processQueue();
+}
+
+/// Read last session's unfinished queue back in and pick up where it stopped.
+///
+/// Runs once at start. Anything that was mid-download comes back as queued —
+/// with its id intact, so the engine finds the half-downloaded file it left in
+/// its own scratch directory and continues rather than starting the video over.
+export async function restoreQueue() {
+  let stored;
+  try {
+    stored = await api.getQueue();
+  } catch {
+    return; // no saved queue, or an unreadable one — start empty, quietly
+  }
+  const items = restoredQueue(stored);
+  if (!items.length) return;
+
+  // Never on top of a live queue: a download started in the seconds before this
+  // resolved would be duplicated by the restore.
+  if (useDownloadStore.getState().downloads.length) return;
+  useDownloadStore.getState().restore(items);
+
+  const settings = useSettingsStore.getState();
+  // Settings may still be in flight; wait for the real value rather than
+  // resuming against the default and ignoring someone's "don't auto-start".
+  if (!settings.loaded) await settings.load().catch(() => {});
+  if (useSettingsStore.getState().settings.autoStartDownloads) processQueue();
+  void prefetchMetadata();
 }
 
 // Bulk enqueues bare URLs, so queued items have no title or thumbnail until
@@ -88,12 +143,16 @@ async function prefetchMetadata() {
 
       try {
         const meta = await api.analyzeUrl(pending.url);
+        // ponytail: a playlist link pasted into *bulk* stays one row — it keeps
+        // its title and downloads as yt-dlp sees fit. Single mode is where a
+        // playlist gets expanded into one row per video.
+        const thumbnailUrl = isPlaylist(meta) ? undefined : meta.thumbnailUrl;
         // It may have started, finished, or been removed while we waited.
         const current = useDownloadStore.getState().downloads.find((d) => d.id === pending.id);
         if (current && !current.title) {
           useDownloadStore.getState().update(pending.id, {
             title: meta.title,
-            thumbnailUrl: meta.thumbnailUrl,
+            thumbnailUrl,
           });
         }
       } catch (err) {
@@ -129,6 +188,47 @@ export function cancel(id: string) {
   }
 }
 
+/// Cancel a whole playlist: the running one is killed, the waiting ones are
+/// marked cancelled.
+///
+/// Marked, not deleted. Dropping one item from the queue by hand means you
+/// don't want it; stopping a playlist means you're stopping *now* — and the
+/// twenty videos that never got their turn are the whole point of resuming
+/// later. Deleting them left nothing to come back to.
+export function cancelGroup(playlistId: string) {
+  const store = useDownloadStore.getState();
+  const mine = store.downloads.filter((d) => d.playlist?.id === playlistId && isPending(d));
+
+  // The waiting ones first, and synchronously: killing the running download
+  // resolves its promise, which starts whatever is still queued.
+  const waiting = mine.filter((d) => d.status === "queued");
+  waiting.forEach((item) => store.update(item.id, { status: "cancelled" }));
+  useHistoryStore.getState().addMany(waiting.map((item) => historyEntry(item, "cancelled")));
+
+  mine
+    .filter((d) => d.status !== "queued")
+    .forEach((item) => api.cancelDownload(item.id).catch(() => {}));
+}
+
+/// Put every unfinished video of a playlist back in the queue.
+///
+/// Cancelling thirty videos takes one click; without this, getting them back
+/// takes thirty — and the queue starts the next one between each, so you are
+/// racing it. Order is preserved: oldest first, so the playlist resumes in the
+/// order it was in.
+export function retryGroup(playlistId: string) {
+  const unfinished = useDownloadStore
+    .getState()
+    .downloads.filter((d) => d.playlist?.id === playlistId && isUnfinished(d));
+
+  // Explicitly in playlist order. Reversing the store happened to work only
+  // while nothing had been re-queued before; once it had, the video holding a
+  // half-downloaded file could land last in the queue.
+  byPlaylistOrder(unfinished)
+    .map((d) => d.id)
+    .forEach(retry);
+}
+
 // One active download at a time (PLAN §19). Called on enqueue and whenever a
 // download settles.
 function processQueue() {
@@ -147,18 +247,35 @@ function processQueue() {
       overwrite: settings.overwriteExisting,
       keepPartial: settings.keepPartialFiles,
       previousTitle: next.previousTitle,
+      // Both titles: a retry knows the name the partial was written under, and
+      // a first attempt on a playlist item already knows its title from the
+      // listing. Either is enough for the engine to find a partial in the folder.
+      title: next.title,
     })
-    .then(({ filePath }) => {
+    .then(({ filePath, alreadyExisted }) => {
       store.update(next.id, {
         status: "completed",
         progress: 1,
         filePath,
+        alreadyExisted,
         completedAt: new Date().toISOString(),
       });
       recordHistory(next, "completed", filePath);
       const label = next.title ?? next.url;
-      notify(`Downloaded “${label}”`, "success");
-      announce("Download complete", `${label}\n${describe(next)}`);
+      if (next.playlist) {
+        // Nothing per video. The queue is already showing each one land, and a
+        // playlist speaks once — when it's done.
+        const progress = playlistProgress(next.playlist);
+        if (!progress.pending) announcePlaylistFinished(next.playlist, progress);
+      } else if (alreadyExisted) {
+        // Says what happened rather than claiming a download that never ran.
+        // No OS notification: nothing was fetched, so there's nothing to
+        // interrupt anyone about.
+        notify(`“${label}” was already in that folder`, "info");
+      } else {
+        notify(`Downloaded “${label}”`, "success");
+        announce("Download complete", `${label}\n${describe(next)}`);
+      }
     })
     .catch((err) => {
       const raw = typeof err === "string" ? err : String(err);
@@ -175,8 +292,15 @@ function processQueue() {
         errorDetails: errorDetails(raw),
       });
       recordHistory(next, "failed");
-      notify(friendlyError(raw), "error");
-      announce("Download failed", next.title ?? next.url);
+      if (next.playlist) {
+        // Quiet here too. The row carries the reason, and the summary at the
+        // end says how many of them there were.
+        const progress = playlistProgress(next.playlist);
+        if (!progress.pending) announcePlaylistFinished(next.playlist, progress);
+      } else {
+        notify(friendlyError(raw), "error");
+        announce("Download failed", next.title ?? next.url);
+      }
     })
     .finally(processQueue);
 }
@@ -195,7 +319,43 @@ export function retry(id: string) {
     quality: item.quality ?? "best",
     outputDirectory: item.outputDirectory,
     previousTitle: item.title,
+    playlist: item.playlist,
+    playlistIndex: item.playlistIndex,
+    createdAt: item.createdAt,
   });
+}
+
+/// How far along a playlist is, right now.
+function playlistProgress(playlist: PlaylistRef) {
+  const items = useDownloadStore
+    .getState()
+    .downloads.filter((d) => d.playlist?.id === playlist.id);
+  // Same reasoning as the queue blocks: after a restart the store holds only
+  // what was unfinished, so the playlist's own total is the honest denominator.
+  const total = playlist.total || items.length;
+  return {
+    total,
+    done: Math.max(0, total - items.filter((d) => d.status !== "completed").length),
+    pending: items.some(isPending),
+  };
+}
+
+/// The end of a playlist, announced once.
+///
+/// A toast and an OS notification are not the same thing and shouldn't follow
+/// the same rule: a toast is gone in four seconds, while thirty OS
+/// notifications sit in the notification centre until they're cleared by hand.
+/// So every video gets a toast, and only the playlist gets a notification.
+///
+/// No per-video toast here — the summary replaces it, rather than firing twice
+/// about the same video.
+function announcePlaylistFinished(
+  playlist: PlaylistRef,
+  progress: { total: number; done: number },
+) {
+  const message = `“${playlist.title}” finished — ${progress.done} of ${progress.total} downloaded`;
+  notify(message, progress.done === progress.total ? "success" : "info");
+  announce("Playlist finished", message);
 }
 
 function describe(item: DownloadItem) {
@@ -215,7 +375,17 @@ function recordHistory(
   status: "completed" | "failed" | "cancelled",
   filePath?: string,
 ) {
-  useHistoryStore.getState().add({
+  useHistoryStore.getState().add(historyEntry(item, status, filePath));
+}
+
+/// The history record for a download, without writing it. Kept separate so a
+/// cancelled playlist can record twenty of them in a single save.
+function historyEntry(
+  item: DownloadItem,
+  status: "completed" | "failed" | "cancelled",
+  filePath?: string,
+): DownloadHistoryItem {
+  return {
     id: item.id,
     title: item.title ?? item.url,
     url: item.url,
@@ -224,8 +394,10 @@ function recordHistory(
     format: item.format,
     quality: item.quality,
     outputDirectory: item.outputDirectory,
+    playlist: item.playlist,
+    playlistIndex: item.playlistIndex,
     status,
     createdAt: item.createdAt,
     completedAt: new Date().toISOString(),
-  });
+  };
 }

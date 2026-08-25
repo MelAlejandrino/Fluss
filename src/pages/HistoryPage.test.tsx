@@ -5,6 +5,7 @@ vi.mock("@/lib/api", () => ({
   api: {
     getHistory: vi.fn(() => Promise.resolve([])),
     saveHistory: vi.fn(() => Promise.resolve()),
+    saveQueue: vi.fn(() => Promise.resolve()),
     openFile: vi.fn(() => Promise.resolve()),
     revealInFolder: vi.fn(() => Promise.resolve()),
     startDownload: vi.fn(() => new Promise(() => {})),

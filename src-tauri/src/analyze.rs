@@ -28,8 +28,41 @@ pub struct VideoMetadata {
     pub available_qualities: Vec<u32>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaylistEntry {
+    pub url: String,
+    pub title: String,
+    pub duration: Option<f64>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaylistMetadata {
+    pub title: String,
+    pub uploader: Option<String>,
+    pub webpage_url: String,
+    /// Flat listing only — one entry per video, no formats. Each entry is
+    /// analyzed properly when it reaches the queue.
+    pub entries: Vec<PlaylistEntry>,
+}
+
+/// Untagged on purpose: a playlist is told apart by its `entries` field, which
+/// a video never carries. Saves the frontend a discriminator it would only
+/// have to keep in sync.
+#[derive(Serialize)]
+#[serde(untagged)]
+pub enum Analysis {
+    Video(VideoMetadata),
+    Playlist(PlaylistMetadata),
+}
+
 #[tauri::command]
-pub async fn analyze_url(app: AppHandle, url: String) -> Result<VideoMetadata, String> {
+pub async fn analyze_url(
+    app: AppHandle,
+    url: String,
+    include_playlist: bool,
+) -> Result<Analysis, String> {
     let yt_dlp = binaries::resolve(&app, "yt-dlp");
     let js_runtime = binaries::js_runtime_args(&app);
     // Analysis hits the same bot wall as the download, so it needs the same
@@ -39,7 +72,16 @@ pub async fn analyze_url(app: AppHandle, url: String) -> Result<VideoMetadata, S
     // Off the UI/runtime thread — yt-dlp metadata fetch takes ~1-2s.
     tauri::async_runtime::spawn_blocking(move || {
         let mut cmd = Command::new(&yt_dlp);
-        cmd.args(["--dump-single-json", "--no-playlist"]);
+        // `--flat-playlist` only bites when the URL resolves to a playlist: entries
+        // come back as bare links instead of a full extraction per video, which is
+        // the difference between a second and a minute for a long list.
+        cmd.args(["--dump-single-json", "--flat-playlist"]);
+        // A "watch?v=X&list=Y" link is both a video and a playlist, and only the
+        // person who pasted it knows which they meant. Default to the video —
+        // that's what the link points at — and let the UI ask for the list.
+        if !include_playlist {
+            cmd.arg("--no-playlist");
+        }
         cmd.args(binaries::solver_args());
         cmd.args(&js_runtime);
         cmd.args(&cookies);
@@ -82,7 +124,11 @@ pub async fn analyze_url(app: AppHandle, url: String) -> Result<VideoMetadata, S
         let json: serde_json::Value = serde_json::from_slice(&stdout)
             .map_err(|e| format!("Could not read media details: {e}"))?;
 
-        Ok(normalize(&json, &url))
+        if json.get("_type").and_then(|v| v.as_str()) == Some("playlist") {
+            Ok(Analysis::Playlist(normalize_playlist(&json, &url)))
+        } else {
+            Ok(Analysis::Video(normalize(&json, &url)))
+        }
     })
     .await
     .map_err(|e| format!("Analysis task failed: {e}"))?
@@ -119,6 +165,46 @@ fn normalize(json: &serde_json::Value, fallback_url: &str) -> VideoMetadata {
         uploader: str_field("uploader").or_else(|| str_field("channel")),
         webpage_url: str_field("webpage_url").unwrap_or_else(|| fallback_url.to_string()),
         available_qualities: available_qualities(json),
+    }
+}
+
+fn normalize_playlist(json: &serde_json::Value, fallback_url: &str) -> PlaylistMetadata {
+    let str_field = |key: &str| json.get(key).and_then(|v| v.as_str()).map(String::from);
+
+    let entries = json
+        .get("entries")
+        .and_then(|e| e.as_array())
+        .map(|entries| {
+            entries
+                .iter()
+                // A channel page is a playlist of playlists ("Videos", "Shorts").
+                // Those tabs are dropped rather than queued — each would expand
+                // into a second list, which is not what one download row means.
+                .filter(|e| e.get("_type").and_then(|t| t.as_str()) != Some("playlist"))
+                .filter_map(|e| {
+                    let url = e
+                        .get("url")
+                        .or_else(|| e.get("webpage_url"))
+                        .and_then(|u| u.as_str())?;
+                    Some(PlaylistEntry {
+                        url: url.to_string(),
+                        title: e
+                            .get("title")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("Untitled")
+                            .to_string(),
+                        duration: e.get("duration").and_then(|d| d.as_f64()),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    PlaylistMetadata {
+        title: str_field("title").unwrap_or_else(|| "Playlist".to_string()),
+        uploader: str_field("uploader").or_else(|| str_field("channel")),
+        webpage_url: str_field("webpage_url").unwrap_or_else(|| fallback_url.to_string()),
+        entries,
     }
 }
 
@@ -243,5 +329,51 @@ mod tests {
             ]
         });
         assert_eq!(available_qualities(&json), vec![1080, 720]);
+    }
+
+    #[test]
+    fn normalizes_a_playlist_and_drops_what_cannot_be_queued() {
+        let json = json!({
+            "_type": "playlist",
+            "title": "Road Trip",
+            "channel": "Someone",
+            "webpage_url": "https://site/playlist?list=PL1",
+            "entries": [
+                { "url": "https://site/watch?v=a", "title": "One", "duration": 61.0 },
+                { "webpage_url": "https://site/watch?v=b", "title": "Two" },
+                // A channel tab: a list, not a video. Queuing it would expand
+                // into another list.
+                { "_type": "playlist", "url": "https://site/@x/shorts", "title": "Shorts" },
+                // No link at all — nothing to download.
+                { "title": "Private video" },
+            ],
+        });
+
+        let p = normalize_playlist(&json, "https://fallback");
+        assert_eq!(p.title, "Road Trip");
+        assert_eq!(p.uploader.as_deref(), Some("Someone"));
+        assert_eq!(p.entries.len(), 2);
+        assert_eq!(p.entries[0].url, "https://site/watch?v=a");
+        assert_eq!(p.entries[0].duration, Some(61.0));
+        assert_eq!(p.entries[1].url, "https://site/watch?v=b");
+    }
+
+    #[test]
+    fn a_playlist_serializes_with_entries_and_a_video_without() {
+        let video = serde_json::to_value(Analysis::Video(normalize(
+            &json!({ "id": "x", "title": "A Video" }),
+            "https://site/watch?v=x",
+        )))
+        .unwrap();
+        assert!(video.get("entries").is_none());
+
+        let list = serde_json::to_value(Analysis::Playlist(normalize_playlist(
+            &json!({ "_type": "playlist", "entries": [] }),
+            "https://site/playlist?list=PL1",
+        )))
+        .unwrap();
+        assert!(list.get("entries").is_some());
+        // camelCase, like every other payload the frontend receives.
+        assert!(list.get("webpageUrl").is_some());
     }
 }

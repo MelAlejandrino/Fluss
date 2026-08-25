@@ -13,6 +13,7 @@ import { useUiStore } from "@/stores/uiStore";
 import { useDownloadEvents } from "@/hooks/useDownloadEvents";
 import { useSettingsInit } from "@/hooks/useSettings";
 import { useHistoryInit } from "@/hooks/useHistory";
+import { useQueueRestore } from "@/hooks/useQueueRestore";
 import { useTheme } from "@/hooks/useTheme";
 import { useUpdateCheck } from "@/hooks/useUpdate";
 import { useContextMenu } from "@/hooks/useContextMenu";
@@ -38,6 +39,7 @@ function App() {
   const Page = PAGES[page];
   useSettingsInit();
   useHistoryInit();
+  useQueueRestore();
   useTheme();
   useUpdateCheck();
   useDownloadEvents();

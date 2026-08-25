@@ -7,6 +7,7 @@ vi.mock("@/lib/api", () => ({
     startDownload: vi.fn(() => new Promise(() => {})),
     cancelDownload: vi.fn(() => Promise.resolve()),
     saveHistory: vi.fn(),
+    saveQueue: vi.fn(() => Promise.resolve()),
     notifyDesktop: vi.fn(),
     openFile: vi.fn(() => Promise.resolve()),
     revealInFolder: vi.fn(() => Promise.resolve()),

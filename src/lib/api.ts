@@ -11,8 +11,13 @@ import {
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { check as checkForUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import type { VideoMetadata, DownloadOptions } from "@/types/media";
-import type { DownloadProgressEvent, DownloadMetaEvent, DownloadHistoryItem } from "@/types/download";
+import type { Analysis, DownloadOptions } from "@/types/media";
+import type {
+  DownloadProgressEvent,
+  DownloadMetaEvent,
+  DownloadHistoryItem,
+  DownloadItem,
+} from "@/types/download";
 import type { Settings, EngineVersions, EngineUpdate } from "@/types/settings";
 
 export type ResizeDir =
@@ -27,12 +32,16 @@ export type ResizeDir =
 
 interface DownloadResult {
   filePath: string;
+  /** The file was already there, so nothing was fetched. */
+  alreadyExisted: boolean;
 }
 
 // The single place `invoke`/Tauri APIs are touched. Everything else imports `api`.
 export const api = {
-  analyzeUrl(url: string) {
-    return invoke<VideoMetadata>("analyze_url", { url });
+  // `includePlaylist` only matters for a link that is both a video and a
+  // playlist ("watch?v=X&list=Y"): false resolves the video, true the list.
+  analyzeUrl(url: string, includePlaylist = false) {
+    return invoke<Analysis>("analyze_url", { url, includePlaylist });
   },
 
   startDownload(id: string, options: DownloadOptions) {
@@ -54,6 +63,19 @@ export const api = {
   async pickDirectory(defaultPath?: string): Promise<string | null> {
     const selected = await openDialog({ directory: true, multiple: false, defaultPath });
     return typeof selected === "string" ? selected : null;
+  },
+
+  // Which of these paths are gone. One call for the whole list.
+  missingFiles(paths: string[]) {
+    return invoke<string[]>("missing_files", { paths });
+  },
+
+  getQueue() {
+    return invoke<DownloadItem[]>("get_queue");
+  },
+
+  saveQueue(items: DownloadItem[]) {
+    return invoke("save_queue", { items });
   },
 
   appVersion() {

@@ -16,6 +16,20 @@ fn ensure_exists(path: &str) -> Result<(), String> {
     }
 }
 
+/// Which of these paths are no longer on disk.
+///
+/// History and the queue both outlive the files they point at — a folder gets
+/// deleted, a drive gets unplugged, files get moved. Asked in one batch rather
+/// than one call per row: a playlist is thirty paths and thirty round trips to
+/// answer a question the filesystem answers instantly.
+#[tauri::command]
+pub fn missing_files(paths: Vec<String>) -> Vec<String> {
+    paths
+        .into_iter()
+        .filter(|path| !Path::new(path).exists())
+        .collect()
+}
+
 /// Open a file with its default application.
 #[tauri::command]
 pub fn open_file(app: AppHandle, path: String) -> Result<(), String> {

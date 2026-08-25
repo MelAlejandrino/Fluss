@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import type { VideoMetadata } from "@/types/media";
+import type { VideoMetadata, PlaylistMetadata } from "@/types/media";
+import { isPlaylist, hasPlaylistAlongside } from "@/lib/analysis";
 import { api } from "@/lib/api";
 import { useUiStore } from "@/stores/uiStore";
 import { friendlyError, errorDetails, ANALYZE_FALLBACK } from "@/lib/errors";
 
 export function useAnalyzeUrl() {
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null);
+  // A playlist link resolves to a list instead of a preview. Only ever one
+  // of the two is set — they are the two shapes of the same answer.
+  const [playlist, setPlaylist] = useState<PlaylistMetadata | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [details, setDetails] = useState<string | undefined>(undefined);
@@ -18,7 +22,7 @@ export function useAnalyzeUrl() {
   // analysis takes seconds, and "New Download" can land in the middle of one.
   const generation = useRef(0);
 
-  async function analyze(url: string) {
+  async function analyze(url: string, includePlaylist = false) {
     if (inFlight.current) return;
     const trimmed = url.trim();
     if (!trimmed) {
@@ -34,10 +38,12 @@ export function useAnalyzeUrl() {
     setDetails(undefined);
     setIsAnalyzing(true);
     setMetadata(null);
+    setPlaylist(null);
     try {
-      const meta = await api.analyzeUrl(trimmed);
+      const result = await api.analyzeUrl(trimmed, includePlaylist);
       if (!isCurrent()) return; // superseded — don't resurrect the old preview
-      setMetadata(meta);
+      if (isPlaylist(result)) setPlaylist(result);
+      else setMetadata(result);
     } catch (err) {
       if (!isCurrent()) return;
       // Friendly message for the user; raw engine output tucked into details.
@@ -55,6 +61,7 @@ export function useAnalyzeUrl() {
 
   function reset() {
     setMetadata(null);
+    setPlaylist(null);
     setError(null);
     setDetails(undefined);
     setIsAnalyzing(false);
@@ -73,11 +80,28 @@ export function useAnalyzeUrl() {
     inFlight.current = false;
     setIsAnalyzing(false);
     setMetadata(null);
+    setPlaylist(null);
     setError(null);
     setDetails(undefined);
   }, [newDownloadTick]);
 
   const retry = lastUrl ? () => analyze(lastUrl) : undefined;
 
-  return { metadata, isAnalyzing, error, details, analyze, retry, reset } as const;
+  // "watch?v=X&list=Y" resolved to the video, because that's what the link
+  // points at. If there's a list attached too, the UI offers to load it —
+  // re-analyzing the same URL, this time as a playlist.
+  const loadPlaylist =
+    metadata && hasPlaylistAlongside(lastUrl) ? () => analyze(lastUrl, true) : undefined;
+
+  return {
+    metadata,
+    playlist,
+    loadPlaylist,
+    isAnalyzing,
+    error,
+    details,
+    analyze,
+    retry,
+    reset,
+  } as const;
 }

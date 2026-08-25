@@ -3,6 +3,7 @@ import type { DownloadCardProps } from "@/types/download";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { showsQuality } from "@/lib/quality";
 import { DownloadStatus } from "./DownloadStatus";
 import { DownloadProgress } from "./DownloadProgress";
 import { Thumbnail } from "./Thumbnail";
@@ -36,7 +37,16 @@ export function DownloadCard({ item, onOpen, onReveal, onCancel, onRetry }: Down
             </h3>
             <div className="flex flex-wrap items-center gap-1.5">
               <Badge mono>{item.format.toUpperCase()}</Badge>
-              {item.quality && <Badge mono>{item.quality}</Badge>}
+              {item.quality && showsQuality(item.format) && <Badge mono>{item.quality}</Badge>}
+              {/* Which playlist this one came out of. Without it a running
+                  download is just a video title with no account of why it's
+                  there — and the folder it lands in wouldn't be obvious. */}
+              {item.alreadyExisted && <Badge>Already in folder</Badge>}
+              {item.playlist && (
+                <Badge tone="accent" className="max-w-[22ch] truncate">
+                  {item.playlist.title}
+                </Badge>
+              )}
             </div>
           </div>
           <DownloadStatus status={item.status} />

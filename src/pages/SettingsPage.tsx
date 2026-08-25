@@ -105,7 +105,7 @@ export function SettingsPage() {
             </Row>
             <Row
               label="Keep partial files"
-              hint="Lets an interrupted download resume instead of starting over."
+              hint="Lets an interrupted download pick up where it stopped instead of starting over — including a playlist you come back to the next day."
             >
               <Switch
                 label="Keep partial files"

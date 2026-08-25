@@ -134,3 +134,64 @@ describe("historyStore", () => {
     expect(api.saveHistory).toHaveBeenCalledOnce();
   });
 });
+
+describe("removePlaylist", () => {
+  const LIST = { id: "pl-1", title: "Road Trip", total: 3 };
+
+  function entry(id: string, url: string, playlist?: { id: string; title: string; total: number }) {
+    return { ...item(id), url, playlist };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useHistoryStore.setState({ history: [], loaded: true, unreadable: false });
+  });
+
+  it("removes every attempt at every video, not just the visible ones", async () => {
+    // The block shows one row per video — the latest outcome — while history
+    // holds one entry per attempt. Removing only what was on screen left the
+    // older attempts behind, and they rebuilt the block on the next render.
+    useHistoryStore.setState({
+      history: [
+        entry("try2", "https://site/a", LIST),
+        entry("try1", "https://site/a", LIST),
+        entry("other", "https://site/b", LIST),
+        entry("loose", "https://site/c"),
+      ],
+      loaded: true,
+      unreadable: false,
+    });
+
+    useHistoryStore.getState().removePlaylist(LIST.id);
+
+    expect(useHistoryStore.getState().history.map((h) => h.id)).toEqual(["loose"]);
+    await settle();
+    expect(api.saveHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves other playlists alone", () => {
+    const other = { id: "pl-2", title: "Cooking", total: 1 };
+    useHistoryStore.setState({
+      history: [entry("mine", "https://site/a", LIST), entry("theirs", "https://site/b", other)],
+      loaded: true,
+      unreadable: false,
+    });
+
+    useHistoryStore.getState().removePlaylist(LIST.id);
+
+    expect(useHistoryStore.getState().history.map((h) => h.id)).toEqual(["theirs"]);
+  });
+
+  it("doesn't write when there was nothing to remove", async () => {
+    useHistoryStore.setState({
+      history: [entry("loose", "https://site/c")],
+      loaded: true,
+      unreadable: false,
+    });
+
+    useHistoryStore.getState().removePlaylist(LIST.id);
+
+    await settle();
+    expect(api.saveHistory).not.toHaveBeenCalled();
+  });
+});

@@ -10,6 +10,7 @@ vi.mock("@/lib/api", () => ({
     // automatically, and these tests only care that it started, not finished.
     startDownload: vi.fn(() => new Promise(() => {})),
     saveHistory: vi.fn(() => Promise.resolve()),
+    saveQueue: vi.fn(() => Promise.resolve()),
     notifyDesktop: vi.fn(() => Promise.resolve()),
   },
 }));
@@ -71,7 +72,7 @@ describe("HomePage — URL input (PLAN §12)", () => {
     typeUrl("  https://site/watch?v=abc  ");
     // Enter inside the field submits the form.
     fireEvent.submit(screen.getByPlaceholderText("Paste a video or audio URL…").closest("form")!);
-    await waitFor(() => expect(analyzeUrl).toHaveBeenCalledWith("https://site/watch?v=abc"));
+    await waitFor(() => expect(analyzeUrl).toHaveBeenCalledWith("https://site/watch?v=abc", false));
   });
 
   it("shows a loading state and disables Analyze while running", async () => {
@@ -174,7 +175,7 @@ describe("HomePage — error state (PLAN §26)", () => {
     fireEvent.click(retry);
     await screen.findByText("A Video");
     expect(analyzeUrl).toHaveBeenCalledTimes(2);
-    expect(analyzeUrl).toHaveBeenLastCalledWith("https://site/watch?v=abc");
+    expect(analyzeUrl).toHaveBeenLastCalledWith("https://site/watch?v=abc", false);
   });
 });
 
@@ -287,5 +288,141 @@ describe("HomePage — bulk mode", () => {
       "disabled",
       true,
     );
+  });
+});
+
+describe("HomePage — playlists", () => {
+  const PLAYLIST = {
+    title: "Road Trip",
+    uploader: "Someone",
+    webpageUrl: "https://site/playlist?list=PL1",
+    entries: [
+      { url: "https://site/watch?v=a", title: "One", duration: 61 },
+      { url: "https://site/watch?v=b", title: "Two" },
+    ],
+  };
+
+  it("lists the videos instead of showing a single preview", async () => {
+    analyzeUrl.mockResolvedValue(PLAYLIST);
+    render(<HomePage />);
+    typeUrl("https://site/playlist?list=PL1");
+    submit();
+
+    expect(await screen.findByText("Road Trip")).toBeDefined();
+    // Count plus the runtime it could total from the entries that carry one.
+    expect(screen.getByText("2 videos · 1:01")).toBeDefined();
+    expect(screen.getByText("One")).toBeDefined();
+    expect(screen.getByText("Two")).toBeDefined();
+    // The single-video Download button must not be offered for a list.
+    expect(screen.queryByRole("button", { name: "Download" })).toBeNull();
+  });
+
+  it("queues one download per entry", async () => {
+    analyzeUrl.mockResolvedValue(PLAYLIST);
+    vi.mocked(api.pickDirectory).mockResolvedValue("/downloads");
+    render(<HomePage />);
+    typeUrl("https://site/playlist?list=PL1");
+    submit();
+    await screen.findByText("Road Trip");
+
+    fireEvent.click(screen.getByRole("button", { name: "No folder selected" }));
+    await screen.findByText("/downloads");
+    fireEvent.click(screen.getByRole("button", { name: /Download 2 videos/ }));
+
+    const downloads = useDownloadStore.getState().downloads;
+    expect(downloads).toHaveLength(2);
+    expect(downloads.map((d) => d.url).sort()).toEqual([
+      "https://site/watch?v=a",
+      "https://site/watch?v=b",
+    ]);
+  });
+
+  it("gives the playlist a folder of its own under the chosen one", async () => {
+    analyzeUrl.mockResolvedValue(PLAYLIST);
+    vi.mocked(api.pickDirectory).mockResolvedValue("/downloads");
+    render(<HomePage />);
+    typeUrl("https://site/playlist?list=PL1");
+    submit();
+    await screen.findByText("Road Trip");
+
+    fireEvent.click(screen.getByRole("button", { name: "No folder selected" }));
+    await screen.findByText("/downloads");
+    // Said up front, before anything is written.
+    expect(screen.getByText("Road Trip", { selector: "span" })).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: /Download 2 videos/ }));
+
+    const downloads = useDownloadStore.getState().downloads;
+    expect(downloads.map((d) => d.outputDirectory)).toEqual([
+      "/downloads/Road Trip",
+      "/downloads/Road Trip",
+    ]);
+    // Both carry the same group, which is what Cancel all acts on.
+    const groups = new Set(downloads.map((d) => d.playlist?.id));
+    expect(groups.size).toBe(1);
+    expect([...groups][0]).toBeTruthy();
+  });
+
+  it("blocks the download when the list resolved to nothing downloadable", async () => {
+    analyzeUrl.mockResolvedValue({ ...PLAYLIST, entries: [] });
+    vi.mocked(api.pickDirectory).mockResolvedValue("/downloads");
+    render(<HomePage />);
+    typeUrl("https://site/playlist?list=PL1");
+    submit();
+    await screen.findByText("Nothing downloadable in this list.");
+
+    fireEvent.click(screen.getByRole("button", { name: "No folder selected" }));
+    await screen.findByText("/downloads");
+    const button = screen.getByRole("button", { name: /Download 0 videos/ }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+});
+
+describe("HomePage — a video link with a playlist attached", () => {
+  const MIXED = "https://site/watch?v=abc&list=PL1";
+  const PLAYLIST = {
+    title: "Road Trip",
+    webpageUrl: "https://site/playlist?list=PL1",
+    entries: [
+      { url: "https://site/watch?v=a", title: "One" },
+      { url: "https://site/watch?v=b", title: "Two" },
+    ],
+  };
+
+  it("resolves the video, and offers the list rather than assuming it", async () => {
+    analyzeUrl.mockResolvedValue(META);
+    render(<HomePage />);
+    typeUrl(MIXED);
+    submit();
+
+    expect(await screen.findByText("A Video")).toBeDefined();
+    expect(analyzeUrl).toHaveBeenCalledWith(MIXED, false);
+    expect(screen.getByRole("button", { name: /Load the whole playlist/ })).toBeDefined();
+  });
+
+  it("swaps the preview for the list when the offer is taken", async () => {
+    analyzeUrl.mockResolvedValue(META);
+    render(<HomePage />);
+    typeUrl(MIXED);
+    submit();
+    await screen.findByText("A Video");
+
+    analyzeUrl.mockResolvedValue(PLAYLIST);
+    fireEvent.click(screen.getByRole("button", { name: /Load the whole playlist/ }));
+
+    expect(await screen.findByText("Road Trip")).toBeDefined();
+    expect(analyzeUrl).toHaveBeenLastCalledWith(MIXED, true);
+    // The single-video preview it replaced must be gone, not stacked above it.
+    expect(screen.queryByText("A Video")).toBeNull();
+  });
+
+  it("makes no offer for a plain video link", async () => {
+    analyzeUrl.mockResolvedValue(META);
+    render(<HomePage />);
+    typeUrl("https://site/watch?v=abc");
+    submit();
+
+    await screen.findByText("A Video");
+    expect(screen.queryByRole("button", { name: /Load the whole playlist/ })).toBeNull();
   });
 });

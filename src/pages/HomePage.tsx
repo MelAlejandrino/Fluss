@@ -1,7 +1,8 @@
-import { ArrowDownToLine } from "lucide-react";
+import { ArrowDownToLine, ListVideo } from "lucide-react";
 import { motion } from "motion/react";
 import { UrlInput } from "@/components/media/UrlInput";
 import { MediaPreview } from "@/components/media/MediaPreview";
+import { PlaylistPreview } from "@/components/media/PlaylistPreview";
 import { FormatSelector } from "@/components/media/FormatSelector";
 import { QualitySelector } from "@/components/media/QualitySelector";
 import { DirectoryPicker } from "@/components/media/DirectoryPicker";
@@ -20,6 +21,7 @@ import { useStartBulkDownload } from "@/hooks/useStartBulkDownload";
 import { useBulkUrls } from "@/hooks/useBulkUrls";
 import { useDownloadMode, type DownloadMode } from "@/hooks/useDownloadMode";
 import { DURATION, EASE, rise } from "@/lib/motion";
+import { folderName } from "@/lib/paths";
 
 /**
  * Placeholder shaped like the preview that's coming, so the page doesn't jump
@@ -47,7 +49,8 @@ function AnalyzingPreview() {
 
 export function HomePage() {
   const { mode, setMode } = useDownloadMode();
-  const { metadata, isAnalyzing, error, details, analyze, retry } = useAnalyzeUrl();
+  const { metadata, playlist, loadPlaylist, isAnalyzing, error, details, analyze, retry, reset } =
+    useAnalyzeUrl();
   const form = useDownloadForm();
   const { start } = useStartDownload();
   const hasDirectory = !!form.directory;
@@ -68,6 +71,23 @@ export function HomePage() {
     });
   }
 
+  // A playlist is queued through the same path as bulk: one row per video,
+  // downloaded one at a time. Titles and thumbnails fill in as the queue
+  // prefetches them — nothing here needs to know about that.
+  function handlePlaylistDownload() {
+    if (!playlist) return;
+    startBulk({
+      urls: playlist.entries.map((entry) => entry.url),
+      format: form.format,
+      quality: form.quality,
+      outputDirectory: form.directory,
+      playlist: { title: playlist.title },
+    });
+    // Same as bulk: once it's queued, the field and the list it produced are
+    // spent. Leaving thirty rows behind invites queueing them all twice.
+    reset();
+  }
+
   function handleBulkDownload() {
     startBulk({
       urls: bulk.validUrls,
@@ -80,7 +100,7 @@ export function HomePage() {
 
   // Only controls whether the orienting line under the field is worth showing.
   // It must never affect *position* — see the note on the container below.
-  const idle = mode === "single" && !metadata && !isAnalyzing && !error;
+  const idle = mode === "single" && !metadata && !playlist && !isAnalyzing && !error;
 
   return (
     // Everything is anchored to the top, in every mode and every state.
@@ -169,6 +189,20 @@ export function HomePage() {
               >
                 <MediaPreview metadata={metadata} />
 
+                {/* The link pointed at a video but carried a playlist too. The
+                    video is what it says on the tin, so that's what was
+                    resolved — the list is one click away rather than a surprise
+                    queue of two hundred files. */}
+                {loadPlaylist && (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pl-1">
+                    <p className="text-base text-ink-3">This link is part of a playlist.</p>
+                    <Button variant="ghost" size="sm" onClick={loadPlaylist}>
+                      <ListVideo />
+                      Load the whole playlist
+                    </Button>
+                  </div>
+                )}
+
                 <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_310px]">
                   <Card className="flex flex-col gap-5">
                     <FormatSelector value={form.format} onChange={form.setFormat} />
@@ -191,6 +225,61 @@ export function HomePage() {
                     >
                       <ArrowDownToLine />
                       Download
+                    </Button>
+                  </Card>
+                </div>
+              </motion.div>
+            )}
+
+            {playlist && !isAnalyzing && (
+              <motion.div
+                variants={rise}
+                initial="hidden"
+                animate="show"
+                className="flex flex-col gap-5"
+              >
+                <PlaylistPreview playlist={playlist} />
+
+                <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_310px]">
+                  <Card className="flex flex-col gap-5">
+                    <FormatSelector value={form.format} onChange={form.setFormat} />
+                    {/* No shared quality list to offer: the videos come from one
+                        source but not necessarily one encode, so this is the
+                        ceiling to aim for, not a promise about every file. */}
+                    <QualitySelector
+                      value={form.quality}
+                      onChange={form.setQuality}
+                      availableQualities={[]}
+                      disabled={form.format === "mp3"}
+                    />
+                  </Card>
+
+                  <Card className="flex flex-col gap-5">
+                    <div className="flex flex-col gap-2">
+                      <DirectoryPicker directory={form.directory} onChoose={form.chooseDirectory} />
+                      {/* Said before the download, not discovered after it: a
+                          playlist makes its own folder, so the files won't be
+                          where a single download would have put them. */}
+                      {form.directory && (
+                        <p className="pl-0.5 text-sm leading-relaxed text-ink-3">
+                          Into a{" "}
+                          <span className="font-medium text-ink-2">
+                            {folderName(playlist.title)}
+                          </span>{" "}
+                          folder inside it.
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      onClick={handlePlaylistDownload}
+                      disabled={!hasDirectory || !playlist.entries.length}
+                      className="w-full"
+                    >
+                      <ArrowDownToLine />
+                      Download {playlist.entries.length} video
+                      {playlist.entries.length === 1 ? "" : "s"}
                     </Button>
                   </Card>
                 </div>

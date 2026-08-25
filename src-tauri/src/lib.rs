@@ -3,6 +3,7 @@ mod binaries;
 mod download;
 mod files;
 mod history;
+mod queue;
 mod settings;
 mod store;
 mod tray;
@@ -73,8 +74,11 @@ pub fn run() {
             files::open_file,
             files::reveal_in_folder,
             files::open_url,
+            files::missing_files,
             history::get_history,
             history::save_history,
+            queue::get_queue,
+            queue::save_queue,
             settings::get_settings,
             settings::save_settings,
             settings::default_download_dir,

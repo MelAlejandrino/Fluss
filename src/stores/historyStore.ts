@@ -12,7 +12,16 @@ interface HistoryState {
   loaded: boolean;
   load: () => Promise<void>;
   add: (item: DownloadHistoryItem) => void;
+  /// Several at once, in one write — cancelling a playlist records every video
+  /// it was still going to fetch.
+  addMany: (items: DownloadHistoryItem[]) => void;
   remove: (id: string) => void;
+  /// Every entry belonging to one playlist, in a single write.
+  removePlaylist: (playlistId: string) => void;
+  /// Flag the completed entries whose file is no longer on disk, and unflag the
+  /// ones that are back. Saves only when something actually changed — this runs
+  /// on every visit to History.
+  markMissing: (missingPaths: ReadonlySet<string>) => void;
 }
 
 // Persisted to disk via Rust; we mirror it in memory and re-save the whole
@@ -43,8 +52,38 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ history });
     save(get);
   },
+  addMany: (items) => {
+    if (!items.length) return;
+    const history = [...items, ...get().history];
+    set({ history });
+    save(get);
+  },
+  markMissing: (missingPaths) => {
+    let changed = false;
+    const history = get().history.map((item) => {
+      if (item.status !== "completed" || !item.filePath) return item;
+      const gone = missingPaths.has(item.filePath);
+      if (gone === (item.fileMissing ?? false)) return item;
+      changed = true;
+      return { ...item, fileMissing: gone };
+    });
+    if (!changed) return;
+    set({ history });
+    save(get);
+  },
   remove: (id) => {
     const history = get().history.filter((h) => h.id !== id);
+    set({ history });
+    save(get);
+  },
+  removePlaylist: (playlistId) => {
+    // Matched on the playlist, not on the rows the page is showing. A playlist
+    // block lists one entry per video — the latest outcome — while history can
+    // hold several for the same video, one per attempt. Removing only what was
+    // on screen left the older attempts behind, and they simply rebuilt the
+    // block: it took a click per round of attempts to clear one playlist.
+    const history = get().history.filter((h) => h.playlist?.id !== playlistId);
+    if (history.length === get().history.length) return;
     set({ history });
     save(get);
   },
