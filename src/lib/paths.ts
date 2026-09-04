@@ -9,6 +9,11 @@ const ILLEGAL = /[<>:"/\\|?*\x00-\x1f]/g;
 /// The fallback matters: a title of nothing but dots or slashes cleans down to
 /// an empty string, and an empty path segment would silently write into the
 /// parent folder instead.
+/// Names Windows still reserves for devices. A folder called NUL is created
+/// happily and then refuses every file written into it — the download fails
+/// with "Fluss can't write to that folder", which is true and useless.
+const RESERVED = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])$/i;
+
 export function folderName(title: string, fallback = "Playlist"): string {
   const cleaned = title
     .replace(ILLEGAL, " ")
@@ -22,7 +27,10 @@ export function folderName(title: string, fallback = "Playlist"): string {
     .replace(/[. ]+$/, "");
   // Capped well short of a full name: the video filename still has to fit
   // underneath it, and Windows caps the whole path at 260 by default.
-  return cleaned.slice(0, 80).trim() || fallback;
+  const name = cleaned.slice(0, 80).trim() || fallback;
+  // Suffixed rather than replaced, so the folder is still recognisably the
+  // playlist's name.
+  return RESERVED.test(name) ? `${name}_` : name;
 }
 
 /// Append one segment to a directory, in that directory's own separator style.

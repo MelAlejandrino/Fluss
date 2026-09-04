@@ -27,4 +27,6 @@ export interface EngineUpdate {
 export interface EngineVersions {
   ytDlp: string;
   ffmpeg: string;
+  /// Browser the sign-in setting reads cookies from; null when none is installed.
+  cookieBrowser: string | null;
 }

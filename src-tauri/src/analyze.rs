@@ -71,55 +71,36 @@ pub async fn analyze_url(
 
     // Off the UI/runtime thread — yt-dlp metadata fetch takes ~1-2s.
     tauri::async_runtime::spawn_blocking(move || {
-        let mut cmd = Command::new(&yt_dlp);
-        // `--flat-playlist` only bites when the URL resolves to a playlist: entries
-        // come back as bare links instead of a full extraction per video, which is
-        // the difference between a second and a minute for a long list.
-        cmd.args(["--dump-single-json", "--flat-playlist"]);
-        // A "watch?v=X&list=Y" link is both a video and a playlist, and only the
-        // person who pasted it knows which they meant. Default to the video —
-        // that's what the link points at — and let the UI ask for the list.
-        if !include_playlist {
-            cmd.arg("--no-playlist");
-        }
-        cmd.args(binaries::solver_args());
-        cmd.args(&js_runtime);
-        cmd.args(&cookies);
-        cmd.arg(&url);
-        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-        binaries::prepare(&mut cmd);
+        let run = |cookies: &[String]| -> Result<Vec<u8>, String> {
+            let mut cmd = Command::new(&yt_dlp);
+            // `--flat-playlist` only bites when the URL resolves to a playlist: entries
+            // come back as bare links instead of a full extraction per video, which is
+            // the difference between a second and a minute for a long list.
+            cmd.args(["--dump-single-json", "--flat-playlist"]);
+            // A "watch?v=X&list=Y" link is both a video and a playlist, and only the
+            // person who pasted it knows which they meant. Default to the video —
+            // that's what the link points at — and let the UI ask for the list.
+            if !include_playlist {
+                cmd.arg("--no-playlist");
+            }
+            cmd.args(binaries::solver_args());
+            cmd.args(&js_runtime);
+            cmd.args(cookies);
+            cmd.arg(&url);
+            cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+            binaries::prepare(&mut cmd);
+            capture(cmd)
+        };
 
-        let mut child = cmd
-            .spawn()
-            .map_err(|e| format!("Could not start the downloader engine: {e}"))?;
-
-        // Drain both pipes on their own threads. A JSON dump easily exceeds the
-        // pipe buffer, and a full buffer would block yt-dlp forever — which the
-        // timeout below would then report as a stall we caused ourselves.
-        let mut out = child.stdout.take().expect("piped stdout");
-        let mut err = child.stderr.take().expect("piped stderr");
-        let out_thread = std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            let _ = out.read_to_end(&mut buf);
-            buf
-        });
-        let err_thread = std::thread::spawn(move || {
-            let mut buf = String::new();
-            let _ = err.read_to_string(&mut buf);
-            buf
-        });
-
-        let status = wait_with_timeout(&mut child, ANALYZE_TIMEOUT).inspect_err(|_| {
-            log::error!("analyze timed out after {}s", ANALYZE_TIMEOUT.as_secs());
-        })?;
-        let stdout = out_thread.join().unwrap_or_default();
-        let stderr = err_thread.join().unwrap_or_default();
-
-        if !status.success() {
-            let stderr = stderr.trim().to_string();
-            log::error!("analyze failed: {stderr}");
-            return Err(stderr);
-        }
+        let stdout = match run(&cookies) {
+            Err(e) if !cookies.is_empty() && crate::settings::is_cookie_failure(&e) => {
+                // The browser sign-in is an optional boost, not a requirement.
+                // Losing it must not cost the user the preview they asked for.
+                log::warn!("analyze: browser cookies unusable, retrying signed-out");
+                run(&[])
+            }
+            other => other,
+        }?;
 
         let json: serde_json::Value = serde_json::from_slice(&stdout)
             .map_err(|e| format!("Could not read media details: {e}"))?;
@@ -132,6 +113,43 @@ pub async fn analyze_url(
     })
     .await
     .map_err(|e| format!("Analysis task failed: {e}"))?
+}
+
+/// Runs a prepared yt-dlp command to completion, returning its stdout or the
+/// stderr it failed with.
+fn capture(mut cmd: Command) -> Result<Vec<u8>, String> {
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Could not start the downloader engine: {e}"))?;
+
+    // Drain both pipes on their own threads. A JSON dump easily exceeds the
+    // pipe buffer, and a full buffer would block yt-dlp forever — which the
+    // timeout below would then report as a stall we caused ourselves.
+    let mut out = child.stdout.take().expect("piped stdout");
+    let mut err = child.stderr.take().expect("piped stderr");
+    let out_thread = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = out.read_to_end(&mut buf);
+        buf
+    });
+    let err_thread = std::thread::spawn(move || {
+        let mut buf = String::new();
+        let _ = err.read_to_string(&mut buf);
+        buf
+    });
+
+    let status = wait_with_timeout(&mut child, ANALYZE_TIMEOUT).inspect_err(|_| {
+        log::error!("analyze timed out after {}s", ANALYZE_TIMEOUT.as_secs());
+    })?;
+    let stdout = out_thread.join().unwrap_or_default();
+    let stderr = err_thread.join().unwrap_or_default();
+
+    if status.success() {
+        return Ok(stdout);
+    }
+    let stderr = stderr.trim().to_string();
+    log::error!("analyze failed: {stderr}");
+    Err(stderr)
 }
 
 /// Waits for `child`, killing it and returning [`TIMED_OUT`] once `limit`
@@ -151,8 +169,6 @@ fn wait_with_timeout(child: &mut Child, limit: Duration) -> Result<ExitStatus, S
         }
     }
 }
-
-
 
 fn normalize(json: &serde_json::Value, fallback_url: &str) -> VideoMetadata {
     let str_field = |key: &str| json.get(key).and_then(|v| v.as_str()).map(String::from);
@@ -218,7 +234,10 @@ fn available_qualities(json: &serde_json::Value) -> Vec<u32> {
                 .iter()
                 .filter(|fmt| {
                     // Keep formats that actually carry video.
-                    !matches!(fmt.get("vcodec").and_then(|v| v.as_str()), Some("none") | None)
+                    !matches!(
+                        fmt.get("vcodec").and_then(|v| v.as_str()),
+                        Some("none") | None
+                    )
                 })
                 .filter_map(|fmt| fmt.get("height").and_then(|h| h.as_u64()))
                 .filter(|&h| h > 0)

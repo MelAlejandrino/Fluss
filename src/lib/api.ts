@@ -100,6 +100,12 @@ export const api = {
     if (granted) sendNotification({ title, body });
   },
 
+  // Tray "Quit" and the confirmed quit dialog: sets the force-quit flag in Rust
+  // and closes the window for real, bypassing minimize-to-tray.
+  forceQuit() {
+    return invoke("force_quit");
+  },
+
   openUrl(url: string) {
     return invoke("open_url", { url });
   },

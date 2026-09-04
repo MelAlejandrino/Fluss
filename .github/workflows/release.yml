@@ -51,6 +51,10 @@ jobs:
           VER="${GITHUB_REF_NAME#v}"
           node -e "const f='package.json',j=require('./'+f);j.version='$VER';require('fs').writeFileSync(f,JSON.stringify(j,null,2)+'\n')"
           node -e "const f='src-tauri/tauri.conf.json',j=require('./'+f);j.version='$VER';require('fs').writeFileSync(f,JSON.stringify(j,null,2)+'\n')"
+          # The crate version too: without it Cargo.toml drifts behind the tag
+          # forever, and anything reading the crate version reports a release
+          # that shipped long ago.
+          node -e "const fs=require('fs'),f='src-tauri/Cargo.toml';fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace(/^version = \".*\"$/m,'version = \"$VER\"'))"
 
       # ci.yml only gates branch pushes and PRs, so without this a tag builds
       # and ships whatever it points at — including a commit that never saw CI.

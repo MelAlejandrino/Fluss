@@ -54,20 +54,84 @@ pub fn save_settings(app: AppHandle, settings: Value) -> Result<(), String> {
     Ok(())
 }
 
-/// The browser we read cookies from. Not a user choice: on Windows, Chromium
-/// (Chrome/Edge/Brave) binds its cookie-encryption key to the browser binary, so
-/// no other process can decrypt the store — Firefox is the only one that can
-/// work there. Elsewhere Chrome is the most common install and works fine.
-fn preferred_browser() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "firefox"
-    } else {
-        "chrome"
-    }
+/// Browsers yt-dlp can read cookies from, best first, as (yt-dlp name, env var
+/// holding the root, profile path under it). Chromium browsers live under
+/// `%LOCALAPPDATA%` on Windows and Firefox/Opera under `%APPDATA%`, so the root
+/// is per-entry rather than assumed.
+///
+/// Windows leads with Firefox on purpose: Chromium browsers there bind the
+/// cookie key to the browser binary (DPAPI/App-Bound Encryption), so most
+/// cookies won't decrypt — but yt-dlp only warns about those, while a browser
+/// that isn't installed at all kills the run. A partial session beats none.
+#[cfg(target_os = "windows")]
+const CANDIDATES: &[(&str, &str, &str)] = &[
+    ("firefox", "APPDATA", "Mozilla/Firefox/Profiles"),
+    ("chrome", "LOCALAPPDATA", "Google/Chrome/User Data"),
+    ("edge", "LOCALAPPDATA", "Microsoft/Edge/User Data"),
+    (
+        "brave",
+        "LOCALAPPDATA",
+        "BraveSoftware/Brave-Browser/User Data",
+    ),
+    ("vivaldi", "LOCALAPPDATA", "Vivaldi/User Data"),
+    ("opera", "APPDATA", "Opera Software/Opera Stable"),
+    ("chromium", "LOCALAPPDATA", "Chromium/User Data"),
+];
+
+#[cfg(target_os = "macos")]
+const CANDIDATES: &[(&str, &str, &str)] = &[
+    (
+        "chrome",
+        "HOME",
+        "Library/Application Support/Google/Chrome",
+    ),
+    (
+        "firefox",
+        "HOME",
+        "Library/Application Support/Firefox/Profiles",
+    ),
+    (
+        "brave",
+        "HOME",
+        "Library/Application Support/BraveSoftware/Brave-Browser",
+    ),
+    ("edge", "HOME", "Library/Application Support/Microsoft Edge"),
+    ("vivaldi", "HOME", "Library/Application Support/Vivaldi"),
+    (
+        "opera",
+        "HOME",
+        "Library/Application Support/com.operasoftware.Opera",
+    ),
+    ("chromium", "HOME", "Library/Application Support/Chromium"),
+];
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+const CANDIDATES: &[(&str, &str, &str)] = &[
+    ("chrome", "HOME", ".config/google-chrome"),
+    ("firefox", "HOME", ".mozilla/firefox"),
+    ("brave", "HOME", ".config/BraveSoftware/Brave-Browser"),
+    ("edge", "HOME", ".config/microsoft-edge"),
+    ("vivaldi", "HOME", ".config/vivaldi"),
+    ("opera", "HOME", ".config/opera"),
+    ("chromium", "HOME", ".config/chromium"),
+];
+
+/// The first browser in [`CANDIDATES`] whose profile directory exists, or `None`
+/// on a machine with none of them. `--cookies-from-browser` aborts the whole run
+/// when the named browser isn't installed, so guessing a fixed name is the
+/// difference between a download that works signed-out and one that never
+/// starts.
+pub fn detect_browser() -> Option<&'static str> {
+    CANDIDATES
+        .iter()
+        .find(|(_, root, profiles)| {
+            std::env::var_os(root).is_some_and(|r| Path::new(&r).join(profiles).exists())
+        })
+        .map(|(name, ..)| *name)
 }
 
-/// `--cookies-from-browser <name>` when the user enabled browser sign-in, else
-/// empty.
+/// `--cookies-from-browser <name>` when the user enabled browser sign-in and a
+/// supported browser is installed, else empty.
 ///
 /// YouTube bot-walls signed-out requests once an IP looks suspicious ("Sign in
 /// to confirm you're not a bot"); borrowing the user's real session is the
@@ -79,14 +143,35 @@ pub fn cookie_args(app: &AppHandle) -> Vec<String> {
         return Vec::new();
     };
     let stored = store::read_json(&path, Value::Null).unwrap_or(Value::Null);
-    cookie_args_from(&stored)
+    cookie_args_from(&stored, detect_browser())
 }
 
-fn cookie_args_from(stored: &Value) -> Vec<String> {
-    match stored.get("useBrowserCookies").and_then(Value::as_bool) {
-        Some(true) => vec!["--cookies-from-browser".into(), preferred_browser().into()],
+fn cookie_args_from(stored: &Value, browser: Option<&str>) -> Vec<String> {
+    match (
+        stored.get("useBrowserCookies").and_then(Value::as_bool),
+        browser,
+    ) {
+        (Some(true), Some(browser)) => {
+            vec!["--cookies-from-browser".into(), browser.into()]
+        }
         _ => Vec::new(),
     }
+}
+
+/// True when yt-dlp died because it couldn't read the browser cookie store —
+/// browser not really installed, profile never created, store locked or
+/// undecryptable. The caller retries signed-out rather than failing the whole
+/// download over an optional extra.
+///
+/// Deliberately narrow: the bot-wall message also says "cookies", but that one
+/// is about *needing* a session, and re-running without one just wastes the
+/// user's time.
+pub fn is_cookie_failure(stderr: &str) -> bool {
+    let e = stderr.to_lowercase();
+    ["cookies database", "cookie database", "unsupported browser"]
+        .iter()
+        .any(|needle| e.contains(needle))
+        || (e.contains("cookie") && e.contains("decrypt"))
 }
 
 /// The OS Videos folder — the sensible default output location.
@@ -103,6 +188,9 @@ pub fn default_download_dir(app: AppHandle) -> Result<String, String> {
 pub struct EngineVersions {
     yt_dlp: String,
     ffmpeg: String,
+    /// Browser the sign-in setting would read from, or `None` when this machine
+    /// has none — Settings says so rather than offering a toggle that can't work.
+    cookie_browser: Option<&'static str>,
 }
 
 #[tauri::command]
@@ -112,6 +200,7 @@ pub async fn engine_versions(app: AppHandle) -> Result<EngineVersions, String> {
     tauri::async_runtime::spawn_blocking(move || EngineVersions {
         yt_dlp: version_of(&yt_dlp, &["--version"], parse_yt_dlp_version),
         ffmpeg: version_of(&ffmpeg, &["-version"], parse_ffmpeg_version),
+        cookie_browser: detect_browser(),
     })
     .await
     .map_err(|e| e.to_string())
@@ -228,10 +317,7 @@ fn parse_yt_dlp_version(out: &str) -> String {
 
 /// "ffmpeg version 7.1 Copyright ..." → the 3rd token.
 fn parse_ffmpeg_version(out: &str) -> String {
-    out.split_whitespace()
-        .nth(2)
-        .unwrap_or(UNKNOWN)
-        .to_string()
+    out.split_whitespace().nth(2).unwrap_or(UNKNOWN).to_string()
 }
 
 const UNKNOWN: &str = "unknown";
@@ -255,25 +341,53 @@ mod tests {
         use serde_json::json;
 
         assert_eq!(
-            cookie_args_from(&json!({ "useBrowserCookies": true })),
-            vec!["--cookies-from-browser", preferred_browser()]
+            cookie_args_from(&json!({ "useBrowserCookies": true }), Some("firefox")),
+            vec!["--cookies-from-browser", "firefox"]
         );
+        // Nothing installed to read from: download signed-out rather than let
+        // yt-dlp abort on a browser that isn't there.
+        assert!(cookie_args_from(&json!({ "useBrowserCookies": true }), None).is_empty());
         // Off is the default — reading the user's cookie store is opt-in, so
         // anything other than a literal `true` must leave it alone. Includes the
         // old string-valued setting from before this became a toggle.
-        assert!(cookie_args_from(&json!({ "useBrowserCookies": false })).is_empty());
-        assert!(cookie_args_from(&json!({ "useBrowserCookies": "yes" })).is_empty());
-        assert!(cookie_args_from(&json!({ "cookiesBrowser": "chrome" })).is_empty());
-        assert!(cookie_args_from(&json!({})).is_empty());
-        assert!(cookie_args_from(&Value::Null).is_empty());
+        assert!(
+            cookie_args_from(&json!({ "useBrowserCookies": false }), Some("firefox")).is_empty()
+        );
+        assert!(
+            cookie_args_from(&json!({ "useBrowserCookies": "yes" }), Some("firefox")).is_empty()
+        );
+        assert!(
+            cookie_args_from(&json!({ "cookiesBrowser": "chrome" }), Some("firefox")).is_empty()
+        );
+        assert!(cookie_args_from(&json!({}), Some("firefox")).is_empty());
+        assert!(cookie_args_from(&Value::Null, Some("firefox")).is_empty());
     }
 
     #[test]
-    fn windows_never_picks_a_chromium_browser() {
-        // Chrome/Edge/Brave cookies are undecryptable there (DPAPI/App-Bound
-        // Encryption), so picking one would fail 100% of the time.
-        if cfg!(target_os = "windows") {
-            assert_eq!(preferred_browser(), "firefox");
+    fn only_a_broken_cookie_store_triggers_the_signed_out_retry() {
+        assert!(is_cookie_failure(
+            "ERROR: could not find firefox cookies database in None"
+        ));
+        assert!(is_cookie_failure(
+            "ERROR: Could not copy Chrome cookie database"
+        ));
+        assert!(is_cookie_failure("ERROR: unsupported browser: safari"));
+        assert!(is_cookie_failure(
+            "ERROR: failed to decrypt cookie with DPAPI"
+        ));
+        // The bot wall is the opposite problem — retrying without the session
+        // fails the same way, slower.
+        assert!(!is_cookie_failure(
+            "ERROR: [youtube] xyz: Sign in to confirm you're not a bot. Use --cookies-from-browser"
+        ));
+        assert!(!is_cookie_failure("ERROR: Video unavailable"));
+    }
+
+    #[test]
+    fn detection_never_invents_a_browser() {
+        // Whatever this machine has, the name must be one yt-dlp accepts.
+        if let Some(name) = detect_browser() {
+            assert!(CANDIDATES.iter().any(|(c, ..)| *c == name));
         }
     }
 
@@ -316,7 +430,9 @@ mod tests {
     #[test]
     fn reads_the_ffmpeg_version() {
         assert_eq!(
-            parse_ffmpeg_version("ffmpeg version 7.1 Copyright (c) 2000-2024 the FFmpeg developers"),
+            parse_ffmpeg_version(
+                "ffmpeg version 7.1 Copyright (c) 2000-2024 the FFmpeg developers"
+            ),
             "7.1"
         );
         // Distro builds carry a suffix; keep it — it's still the version.
@@ -340,7 +456,11 @@ mod tests {
         let result = parse_update(out);
         assert!(!result.updated);
         // The message has to name the way out, not just refuse.
-        assert!(result.message.contains("pip install -U yt-dlp"), "{}", result.message);
+        assert!(
+            result.message.contains("pip install -U yt-dlp"),
+            "{}",
+            result.message
+        );
     }
 
     #[test]

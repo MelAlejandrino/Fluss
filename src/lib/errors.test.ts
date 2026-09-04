@@ -37,6 +37,14 @@ describe("friendlyError", () => {
       ["ERROR: Failed to decrypt with DPAPI. See https://github.com/...", /browser sign-in/],
       ["ERROR: Could not copy Chrome cookie database. See https://...", /browser sign-in/],
       ["ERROR: could not find firefox cookies database in None", /browser sign-in/],
+      // The preflight sentinel and yt-dlp's own wording land on the same advice.
+      ["__NOFFMPEG__", /FFmpeg/],
+      // Windows' way of saying the path exceeded 260 characters.
+      [
+        "ERROR: unable to open for writing: [Errno 2] No such file or directory: 'C:/very/deep/aaaa.mp4.part'",
+        /path is too long/,
+      ],
+      ["ERROR: You have requested merging of multiple formats but ffmpeg is not installed", /FFmpeg/],
     ];
     for (const [raw, expected] of cases) {
       expect(friendlyError(raw), raw).toMatch(expected);

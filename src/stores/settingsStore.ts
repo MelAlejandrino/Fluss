@@ -37,7 +37,7 @@ const UNREADABLE = Symbol("unreadable");
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   settings: DEFAULTS,
-  engine: { ytDlp: "…", ffmpeg: "…" },
+  engine: { ytDlp: "…", ffmpeg: "…", cookieBrowser: null },
   appVersion: "",
   loaded: false,
   unreadable: false,
@@ -45,15 +45,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const [stored, dir, engine, appVersion] = await Promise.all([
       api.getSettings().catch(() => UNREADABLE),
       api.defaultDownloadDir().catch(() => ""),
-      api.engineVersions().catch(() => ({ ytDlp: "unknown", ffmpeg: "unknown" })),
+      api.engineVersions().catch(() => ({ ytDlp: "unknown", ffmpeg: "unknown", cookieBrowser: null })),
       api.appVersion().catch(() => ""),
     ]);
     const unreadable = stored === UNREADABLE;
+    const saved = unreadable ? null : (stored as Settings | null);
     set({
       settings: {
         ...DEFAULTS,
-        defaultDownloadDirectory: dir,
-        ...(unreadable ? {} : (stored as Settings | null) ?? {}),
+        ...(saved ?? {}),
+        // A saved empty string must not beat the OS Videos folder. It can be
+        // written by a settings change made in the moment before this first
+        // load returns, and it sticks forever after: every download then asks
+        // for a folder the app already knows.
+        defaultDownloadDirectory: saved?.defaultDownloadDirectory || dir,
       },
       engine,
       appVersion,

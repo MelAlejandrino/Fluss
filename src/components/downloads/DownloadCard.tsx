@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { showsQuality } from "@/lib/quality";
+import { hasFile, isUnfinished } from "@/lib/downloadGroups";
 import { DownloadStatus } from "./DownloadStatus";
 import { DownloadProgress } from "./DownloadProgress";
 import { Thumbnail } from "./Thumbnail";
@@ -18,8 +19,12 @@ import { Thumbnail } from "./Thumbnail";
  */
 export function DownloadCard({ item, onOpen, onReveal, onCancel, onRetry }: DownloadCardProps) {
   const showProgress = item.status === "downloading" || item.status === "processing";
-  const isDone = item.status === "completed";
-  const canRetry = item.status === "failed" || item.status === "cancelled";
+  // `hasFile`/`isUnfinished`, not a bare status test: a completed download whose
+  // file was deleted has nothing to open, and offering Open File on it just
+  // produces "This file was moved or deleted". The compact rows already knew
+  // this; the full card didn't.
+  const isDone = hasFile(item);
+  const canRetry = isUnfinished(item);
   const hasActions = showProgress || isDone || canRetry;
 
   return (
@@ -41,7 +46,8 @@ export function DownloadCard({ item, onOpen, onReveal, onCancel, onRetry }: Down
               {/* Which playlist this one came out of. Without it a running
                   download is just a video title with no account of why it's
                   there — and the folder it lands in wouldn't be obvious. */}
-              {item.alreadyExisted && <Badge>Already in folder</Badge>}
+              {item.fileMissing && <Badge tone="warn">File deleted</Badge>}
+              {item.alreadyExisted && !item.fileMissing && <Badge>Already in folder</Badge>}
               {item.playlist && (
                 <Badge tone="accent" className="max-w-[22ch] truncate">
                   {item.playlist.title}

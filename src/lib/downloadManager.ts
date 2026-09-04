@@ -40,6 +40,18 @@ export function nextToStart(downloads: DownloadItem[]): DownloadItem | null {
   return queued.length ? queued[queued.length - 1] : null;
 }
 
+/// What makes two queue entries the same download: same link, same settings,
+/// same destination. A different quality or folder is a different file, so it
+/// is not a duplicate.
+function identity(item: {
+  url: string;
+  format: string;
+  quality?: string;
+  outputDirectory: string;
+}): string {
+  return [item.url, item.format, item.quality ?? "", item.outputDirectory].join("\u0000");
+}
+
 export function enqueue(input: EnqueueInput) {
   enqueueMany([input]);
 }
@@ -52,11 +64,28 @@ export function enqueue(input: EnqueueInput) {
 /// so far: quadratic work on the UI thread, with the window locked for as long
 /// as it took. One update, one write.
 export function enqueueMany(inputs: EnqueueInput[]) {
-  const wanted = inputs.filter((input) => input.outputDirectory);
-  if (wanted.length !== inputs.length) {
+  const withDirectory = inputs.filter((input) => input.outputDirectory);
+  if (withDirectory.length !== inputs.length) {
     notify("No download folder selected. Choose one in Settings or pick a folder.", "error");
   }
-  if (!wanted.length) return;
+  if (!withDirectory.length) return;
+
+  // The same video queued twice writes to the same filename: the second run
+  // finds the first one's file, reports "already downloaded", and records a
+  // success that fetched nothing. Only *pending* items count — re-downloading
+  // something that already finished is a legitimate thing to ask for.
+  const pending = useDownloadStore.getState().downloads.filter(isPending);
+  const seen = new Set(pending.map(identity));
+  const wanted = withDirectory.filter((input) => {
+    const key = identity(input);
+    if (seen.has(key)) return false;
+    seen.add(key); // also collapses duplicates inside this very batch
+    return true;
+  });
+  if (!wanted.length) {
+    notify("Already in the queue.", "info");
+    return;
+  }
 
   const now = new Date().toISOString();
   useDownloadStore.getState().addMany(
@@ -151,7 +180,10 @@ async function prefetchMetadata() {
         const current = useDownloadStore.getState().downloads.find((d) => d.id === pending.id);
         if (current && !current.title) {
           useDownloadStore.getState().update(pending.id, {
-            title: meta.title,
+            // Falls back to the URL: this loop picks the next queued item
+            // *without* a title, so an empty one would hand it the same item
+            // forever, re-analyzing in a tight loop.
+            title: meta.title || pending.url,
             thumbnailUrl,
           });
         }

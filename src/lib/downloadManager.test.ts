@@ -14,7 +14,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import { api } from "@/lib/api";
-import { nextToStart, cancelGroup, retryGroup } from "./downloadManager";
+import { nextToStart, cancelGroup, retryGroup, enqueue } from "./downloadManager";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useDownloadStore } from "@/stores/downloadStore";
 import { useHistoryStore } from "@/stores/historyStore";
@@ -209,5 +209,44 @@ describe("retryGroup", () => {
     // after — without it "Keep partial files" can't resume anything.
     expect(requeued?.previousTitle).toBe("Video b");
     expect(requeued?.outputDirectory).toBe("/downloads/Road Trip");
+  });
+});
+
+describe("duplicate guard", () => {
+  beforeEach(() => {
+    useDownloadStore.setState({ downloads: [] });
+    useHistoryStore.setState({ history: [], loaded: true, unreadable: false });
+  });
+
+  it("won't queue the same download twice while one is still pending", () => {
+    const input = {
+      url: "https://site/v1",
+      format: "mp4" as const,
+      quality: "best" as const,
+      outputDirectory: "/out",
+    };
+    enqueue(input);
+    enqueue(input);
+
+    expect(useDownloadStore.getState().downloads).toHaveLength(1);
+  });
+
+  it("still allows a different quality, folder, or a finished one again", () => {
+    const base = {
+      url: "https://site/v1",
+      format: "mp4" as const,
+      quality: "best" as const,
+      outputDirectory: "/out",
+    };
+    enqueue(base);
+    enqueue({ ...base, quality: "720p" });
+    enqueue({ ...base, outputDirectory: "/elsewhere" });
+    expect(useDownloadStore.getState().downloads).toHaveLength(3);
+
+    // Once it's no longer pending, asking for it again is a real request.
+    const done = useDownloadStore.getState().downloads;
+    done.forEach((d) => useDownloadStore.getState().update(d.id, { status: "completed" }));
+    enqueue(base);
+    expect(useDownloadStore.getState().downloads).toHaveLength(4);
   });
 });

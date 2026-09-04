@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { api } from "@/lib/api";
 
 /**
@@ -10,8 +9,10 @@ import { api } from "@/lib/api";
 export function useTray() {
   useEffect(() => {
     const unlisten = api.onTrayQuitRequest(async () => {
-      api.forceCancelAll();
-      await invoke("force_quit");
+      // Kill first, then quit: an unawaited cancel loses the race with the
+      // window closing and leaves yt-dlp running.
+      await api.forceCancelAll().catch(() => {});
+      await api.forceQuit();
     });
     return () => {
       unlisten.then((fn) => fn());

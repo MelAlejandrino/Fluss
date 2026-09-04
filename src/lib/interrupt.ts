@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useDownloadStore } from "@/stores/downloadStore";
 import { useUiStore } from "@/stores/uiStore";
 import { api } from "@/lib/api";
@@ -21,15 +20,18 @@ export function requestInterrupt(action: InterruptAction) {
     useUiStore.getState().setPendingInterrupt(action);
     return;
   }
-  performInterrupt(action);
+  void performInterrupt(action);
 }
 
-export function performInterrupt(action: InterruptAction) {
+export async function performInterrupt(action: InterruptAction) {
   useUiStore.getState().setPendingInterrupt(null);
-  api.forceCancelAll();
+  // Awaited: closing the window ends the process, and on Windows a yt-dlp that
+  // hasn't been killed yet is not killed with its parent — it keeps downloading
+  // into a scratch directory nothing will ever clean up.
+  await api.forceCancelAll().catch(() => {});
   if (action === "quit") {
     // Bypass minimize-to-tray: the user explicitly confirmed they want to quit.
-    invoke("force_quit");
+    void api.forceQuit();
   } else {
     window.location.reload();
   }

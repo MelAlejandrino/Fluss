@@ -45,3 +45,16 @@ describe("joinPath", () => {
     expect(joinPath("/videos/", "Road Trip")).toBe("/videos/Road Trip");
   });
 });
+
+describe("folderName — Windows device names", () => {
+  it("gets out of the way of a reserved name", () => {
+    // A "NUL" folder is created fine and then swallows every file written into
+    // it, so the whole playlist fails on a name the user can't see is special.
+    expect(folderName("NUL")).toBe("NUL_");
+    expect(folderName("con")).toBe("con_");
+    expect(folderName("COM1")).toBe("COM1_");
+    // Only the bare name is reserved — anything longer is a normal folder.
+    expect(folderName("Nullify")).toBe("Nullify");
+    expect(folderName("CON CON")).toBe("CON CON");
+  });
+});

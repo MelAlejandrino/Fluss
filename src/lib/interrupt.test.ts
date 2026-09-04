@@ -1,16 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { invoke } from "@tauri-apps/api/core";
 import { requestInterrupt, performInterrupt } from "./interrupt";
 import { useUiStore } from "@/stores/uiStore";
 import { useDownloadStore } from "@/stores/downloadStore";
 import { api } from "@/lib/api";
 import type { DownloadItem } from "@/types/download";
 
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(),
-}));
 vi.mock("@/lib/api", () => ({
-  api: { forceCancelAll: vi.fn() },
+  api: {
+    forceCancelAll: vi.fn(() => Promise.resolve()),
+    forceQuit: vi.fn(() => Promise.resolve()),
+  },
 }));
 
 const reload = vi.fn();
@@ -33,13 +32,29 @@ describe("interrupt (PLAN §45)", () => {
     useDownloadStore.setState({ downloads: [] });
   });
 
-  it("goes straight through when nothing is downloading", () => {
-    requestInterrupt("quit");
+  it("goes straight through when nothing is downloading", async () => {
+    await performInterrupt("quit");
     expect(useUiStore.getState().pendingInterrupt).toBeNull(); // no dialog
-    expect(invoke).toHaveBeenCalledWith("force_quit");
+    expect(api.forceQuit).toHaveBeenCalled();
 
-    requestInterrupt("reload");
+    await performInterrupt("reload");
     expect(reload).toHaveBeenCalled();
+  });
+
+  it("kills the engines before the window closes", async () => {
+    // Not just "both were called": the quit closes the window, and a cancel
+    // still in flight at that point leaves yt-dlp running with no parent.
+    const order: string[] = [];
+    vi.mocked(api.forceCancelAll).mockImplementationOnce(async () => {
+      order.push("cancel");
+    });
+    vi.mocked(api.forceQuit).mockImplementationOnce(async () => {
+      order.push("quit");
+    });
+
+    await performInterrupt("quit");
+
+    expect(order).toEqual(["cancel", "quit"]);
   });
 
   it("raises the app's own dialog instead of reloading", () => {
@@ -53,12 +68,12 @@ describe("interrupt (PLAN §45)", () => {
     expect(api.forceCancelAll).not.toHaveBeenCalled();
   });
 
-  it("stops the engines before reloading, not just the UI", () => {
+  it("stops the engines before reloading, not just the UI", async () => {
     // A reload wipes the store that tracks downloads while the Rust registry
     // keeps running them — orphaned, uncancellable, unrecorded.
     useDownloadStore.setState({ downloads: [downloading] });
     requestInterrupt("reload");
-    performInterrupt("reload");
+    await performInterrupt("reload");
 
     expect(api.forceCancelAll).toHaveBeenCalled();
     expect(reload).toHaveBeenCalled();
@@ -71,7 +86,7 @@ describe("interrupt (PLAN §45)", () => {
     useUiStore.getState().setPendingInterrupt(null);
 
     expect(api.forceCancelAll).not.toHaveBeenCalled();
-    expect(invoke).not.toHaveBeenCalled();
+    expect(api.forceQuit).not.toHaveBeenCalled();
     expect(useDownloadStore.getState().downloads).toHaveLength(1);
   });
 });

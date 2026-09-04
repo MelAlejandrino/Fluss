@@ -77,6 +77,23 @@ pub fn js_runtime_args(app: &AppHandle) -> Vec<String> {
     }
 }
 
+/// Whether yt-dlp will have an FFmpeg to post-process with — ours, or one on
+/// the machine's PATH (dev builds ship no engines).
+///
+/// Checked before a download starts: without it the merge fails only after the
+/// bytes are on disk, and the user is left with nothing to show for the wait.
+pub fn ffmpeg_available(app: &AppHandle) -> bool {
+    if bundled_path(app, "ffmpeg").is_some() {
+        return true;
+    }
+    let mut cmd = Command::new(with_exe_suffix("ffmpeg"));
+    cmd.arg("-version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    prepare(&mut cmd);
+    cmd.status().is_ok_and(|s| s.success())
+}
+
 fn platform_dir() -> &'static str {
     if cfg!(target_os = "windows") {
         "windows"

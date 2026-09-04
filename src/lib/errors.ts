@@ -10,6 +10,8 @@ export const ANALYZE_FALLBACK =
 export const CANCELLED = "__CANCELLED__";
 export const NO_OUTPUT_DIR = "__NODIR__";
 export const NO_WRITE_PERMISSION = "__NOWRITE__";
+/** No FFmpeg bundled and none on PATH — checked before the download starts. */
+export const NO_FFMPEG = "__NOFFMPEG__";
 /** Rust gave up waiting on yt-dlp and killed it (analyze has a 90s bound). */
 export const TIMED_OUT = "__TIMEOUT__";
 
@@ -27,12 +29,20 @@ const PATTERNS: [RegExp, string][] = [
     "Fluss can't write to that folder. Choose a different one, or check its permissions.",
   ],
   [
+    // Windows reports a path over its 260-character limit as a *missing*
+    // file, which is the one thing it isn't. Our own preflight already
+    // rejected a folder that's genuinely gone, so anything reaching here is
+    // about the name being too long to write.
+    /unable to open for writing|file ?name too long|filename or extension is too long|\[errno 36\]/i,
+    "That file's full path is too long for this system. Pick a folder closer to the top of the drive, or shorten the playlist folder's name.",
+  ],
+  [
     /no space left|not enough space|disk (is )?full|\[errno 28\]/i,
     "Not enough disk space to finish this download. Free up space and try again.",
   ],
   [
-    /ffmpeg (is )?not (installed|found)|you have requested merging|ffprobe.*not found/i,
-    "The media processor (FFmpeg) is missing, so the video and audio can't be combined.",
+    /__NOFFMPEG__|ffmpeg (is )?not (installed|found)|you have requested merging|ffprobe.*not found/i,
+    "Fluss's media processor (FFmpeg) is missing, so downloads can't be finished. Reinstalling Fluss restores it.",
   ],
   [
     // Every way reading the browser session can fail — locked file, undecryptable

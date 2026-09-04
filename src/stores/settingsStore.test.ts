@@ -46,6 +46,16 @@ describe("settingsStore", () => {
     expect(api.saveSettings).toHaveBeenCalled();
   });
 
+  it("falls back to the OS folder when the saved one is blank", async () => {
+    // Written by a settings change that landed before the first load finished.
+    // Without the fallback every download asks for a folder from then on.
+    vi.mocked(api.getSettings).mockResolvedValue({ defaultDownloadDirectory: "" } as never);
+    await useSettingsStore.getState().load();
+    expect(useSettingsStore.getState().settings.defaultDownloadDirectory).toBe(
+      "C:/Users/x/Videos",
+    );
+  });
+
   it("never overwrites a damaged file", async () => {
     vi.mocked(api.getSettings).mockRejectedValue("expected value at line 1");
     await useSettingsStore.getState().load();

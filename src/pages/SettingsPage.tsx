@@ -28,6 +28,7 @@ export function SettingsPage() {
     openRepository,
     updateEngine,
     updatingEngine,
+    browserSignIn,
     checkForUpdates,
   } = useSettings();
 
@@ -139,13 +140,11 @@ export function SettingsPage() {
         <Card>
           <CardHeader title="Engine" meta="yt-dlp + FFmpeg" />
           <div className="flex flex-col">
-            <Row
-              label="Use my browser sign-in"
-              hint="Turn this on if a site says it can't verify you. Fluss uses the browser you're already signed in with."
-            >
+            <Row label="Use my browser sign-in" hint={browserSignIn.hint}>
               <Switch
                 label="Use my browser sign-in"
-                checked={settings.useBrowserCookies}
+                checked={settings.useBrowserCookies && browserSignIn.available}
+                disabled={!browserSignIn.available}
                 onChange={(v) => update("useBrowserCookies", v)}
               />
             </Row>
