@@ -3,6 +3,36 @@
 The release workflow pulls the notes for a tag from the matching `## vX.Y.Z`
 section below. Keep the newest version at the top.
 
+## v0.11.2
+
+**Fixes**
+- **Browser sign-in no longer needs Firefox specifically.** Fluss looks for
+  whichever supported browser you actually have — Firefox, Chrome, Edge, Brave,
+  Vivaldi, Opera or Chromium — instead of assuming Firefox and failing every
+  download on a machine without it. If the browser's cookies turn out to be
+  unreadable, the download continues signed-out rather than stopping, and the
+  setting now says which browser it will use, or switches off when there is no
+  browser to read.
+- **A download can't be killed by a missing FFmpeg any more.** Fluss checks for
+  its media engine before it starts instead of failing at the merge, after the
+  whole video has transferred, and release builds can no longer be produced
+  without the engines bundled.
+- **Quitting mid-download really stops the engine.** On Windows it could
+  outlive the app and keep downloading with nowhere to put the result.
+- **A finished download no longer deletes another one's progress.** A video
+  whose name merely started with the same text as the finished one lost the
+  partial file it would have resumed from.
+- **The same link can't be queued twice.** The second copy fetched nothing and
+  still reported success.
+- **Very long titles download instead of failing at the end.** Filenames are
+  capped to stay inside Windows' path limit, and if a path is still too long
+  the message says so instead of blaming the download.
+- **The default download folder sticks.** A blank saved folder could override
+  your Videos folder permanently, leaving every download asking for one.
+- **A playlist named after a Windows device works.** "NUL" or "CON" produced a
+  folder that silently refused every file.
+- **A deleted file no longer offers "Open File"** on the download card — it
+  offers to fetch it again, matching every other view.
 ## v0.11.1
 
 **Fixes**
